@@ -1,4 +1,4 @@
-# ⚡ ZyloRun — Autonomous Software Risk & Security Intelligence Platform
+ # ⚡ ZyloRun — Autonomous Software Risk & Security Intelligence Platform
 
 <p align="center">
   <img src="tester/frontend/public/zylorun-logo.svg" alt="ZyloRun Logo" width="110" height="110" />

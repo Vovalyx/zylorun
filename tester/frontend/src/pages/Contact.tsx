@@ -112,22 +112,34 @@ export default function Contact() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 pt-1">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
               <a
-                href="mailto:zylorun.vovalyx@gmail.com"
-                className="flex-1 py-2 px-3 rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-medium text-xs transition-colors text-center inline-flex items-center justify-center gap-1.5 shadow-sm"
+                href="https://mail.google.com/mail/?view=cm&fs=1&to=zylorun.vovalyx@gmail.com&su=ZyloRun%20Security%20Platform%20Inquiry"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 py-2.5 px-3 rounded-lg bg-red-600 hover:bg-red-500 text-white font-medium text-xs transition-colors text-center inline-flex items-center justify-center gap-1.5 shadow-sm"
               >
-                <Mail className="w-3.5 h-3.5" /> Open Email Client
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+                </svg>
+                Open in Gmail (Web)
               </a>
               <button
                 type="button"
                 onClick={handleCopyEmail}
-                className="py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium transition-colors inline-flex items-center gap-1.5"
+                className="py-2.5 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium transition-colors inline-flex items-center justify-center gap-1.5"
                 title="Copy email to clipboard"
               >
                 {copiedEmail ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                {copiedEmail ? 'Copied!' : 'Copy'}
+                {copiedEmail ? 'Copied!' : 'Copy Email'}
               </button>
+              <a
+                href="mailto:zylorun.vovalyx@gmail.com"
+                className="py-2.5 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-medium transition-colors inline-flex items-center justify-center gap-1.5"
+                title="Open default desktop mail client"
+              >
+                <Mail className="w-3.5 h-3.5" /> Desktop App
+              </a>
             </div>
           </div>
 

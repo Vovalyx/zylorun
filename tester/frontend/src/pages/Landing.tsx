@@ -8,6 +8,13 @@ export default function Landing() {
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [copiedContactEmail, setCopiedContactEmail] = useState(false);
+
+  const handleCopyContactEmail = () => {
+    navigator.clipboard.writeText('zylorun.vovalyx@gmail.com');
+    setCopiedContactEmail(true);
+    setTimeout(() => setCopiedContactEmail(false), 2500);
+  };
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -1505,12 +1512,25 @@ export default function Landing() {
 
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
                 <a
-                  href="mailto:zylorun.vovalyx@gmail.com"
+                  href="https://mail.google.com/mail/?view=cm&fs=1&to=zylorun.vovalyx@gmail.com&su=ZyloRun%20Security%20Platform%20Inquiry"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="btn p mag"
                   style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}
                 >
-                  ✉ Send Direct Email
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+                  </svg>
+                  Open in Gmail (Web)
                 </a>
+                <button
+                  type="button"
+                  className="btn mag"
+                  onClick={handleCopyContactEmail}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                >
+                  {copiedContactEmail ? '✓ Copied to Clipboard!' : '📋 Copy Email'}
+                </button>
                 <button
                   type="button"
                   className="btn mag"
@@ -1519,6 +1539,14 @@ export default function Landing() {
                 >
                   📝 Open Contact Form
                 </button>
+                <a
+                  href="mailto:zylorun.vovalyx@gmail.com"
+                  className="btn mag"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', textDecoration: 'none', opacity: 0.8 }}
+                  title="Open default desktop mail client"
+                >
+                  ✉ Default Mail Client
+                </a>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', marginTop: '20px', fontSize: '12px', color: '#64748b' }}>

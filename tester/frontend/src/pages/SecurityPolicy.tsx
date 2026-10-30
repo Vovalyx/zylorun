@@ -113,9 +113,19 @@ export default function SecurityPolicy() {
           <p className="text-sm text-slate-300">
             Please email full proof-of-concept details, reproduction steps, and severity impact directly to our dedicated security response team:
           </p>
-          <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs sm:text-sm text-brand-400 flex items-center justify-between">
+          <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs sm:text-sm text-brand-400 flex flex-wrap items-center justify-between gap-3">
             <span>zylorun.vovalyx@gmail.com</span>
-            <span className="text-xs text-slate-500 font-sans">SLA: 24h Triage</span>
+            <div className="flex items-center gap-2">
+              <a
+                href="https://mail.google.com/mail/?view=cm&fs=1&to=zylorun.vovalyx@gmail.com&su=SECURITY%20VULNERABILITY%20REPORT"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-sans text-xs font-medium transition-colors"
+              >
+                Open in Gmail
+              </a>
+              <span className="text-xs text-slate-500 font-sans">SLA: 24h Triage</span>
+            </div>
           </div>
           <p className="text-xs text-slate-400">
             Please include a summary of the vulnerability, affected endpoints, step-by-step reproduction instructions, and your preferred public handle for security advisory credit.

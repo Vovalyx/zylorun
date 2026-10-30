@@ -195,10 +195,18 @@ export default function PrivacyPolicy() {
           </p>
           <div className="pt-2 flex flex-col sm:flex-row sm:items-center gap-4">
             <a
-              href="mailto:zylorun.vovalyx@gmail.com"
+              href="https://mail.google.com/mail/?view=cm&fs=1&to=zylorun.vovalyx@gmail.com&su=ZyloRun%20Privacy%20Inquiry"
+              target="_blank"
+              rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-medium text-sm transition-colors shadow-sm w-fit"
             >
-              <Mail className="w-4 h-4" /> Email: zylorun.vovalyx@gmail.com
+              <Mail className="w-4 h-4" /> Open in Gmail: zylorun.vovalyx@gmail.com
+            </a>
+            <a
+              href="mailto:zylorun.vovalyx@gmail.com"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-sm transition-colors border border-slate-700 w-fit"
+            >
+              Default Mail App
             </a>
             <a
               href="https://www.vovalyx.in"

@@ -1517,6 +1517,14 @@ export default function Landing() {
                   rel="noopener noreferrer"
                   className="btn p mag"
                   style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}
+                  onClick={() => {
+                    apiClient.post('/contact', {
+                      name: 'Website Visitor',
+                      email: 'visitor@gmail.com',
+                      subject: 'Gmail Web Compose Initiated',
+                      message: 'A visitor clicked "Open in Gmail (Web)" from the landing page contact section to compose an inquiry.'
+                    }).catch(() => {});
+                  }}
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>

@@ -72,6 +72,7 @@ async def submit_contact_form(
         raise HTTPException(status_code=500, detail="Unable to process your inquiry right now. Please email directly to zylorun.vovalyx@gmail.com")
 
 @router.get("/admin/contact-messages")
+@router.get("/api/v1/admin/contact-messages")
 async def get_contact_messages(
     current_user: dict = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db)
@@ -94,4 +95,26 @@ async def get_contact_messages(
         ]
     except Exception as exc:
         logger.exception("Failed to fetch contact messages")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@router.delete("/admin/contact-messages/{msg_id}")
+@router.delete("/api/v1/admin/contact-messages/{msg_id}")
+async def delete_contact_message(
+    msg_id: int,
+    current_user: dict = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Admin route to delete a contact message."""
+    try:
+        res = await db.execute(select(ContactMessage).where(ContactMessage.id == msg_id))
+        msg = res.scalars().first()
+        if not msg:
+            raise HTTPException(status_code=404, detail="Message not found")
+        await db.delete(msg)
+        await db.commit()
+        return {"status": "success", "message": f"Message #{msg_id} deleted"}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Failed to delete contact message")
         raise HTTPException(status_code=500, detail=str(exc))

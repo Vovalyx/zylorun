@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { 
   Users, Eye, AlertTriangle, ShieldCheck, RefreshCw, Search, 
   Globe, Bug, CheckCircle2, Trash2, Sparkles, ChevronDown, ChevronRight,
-  Lock, ArrowRight, ArrowLeft, LogOut, KeyRound, Shield
+  Lock, ArrowRight, ArrowLeft, LogOut, KeyRound, Shield, Mail, Copy, Check
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
@@ -66,6 +66,16 @@ interface ErrorItem {
   created_at: string | null;
 }
 
+interface ContactMessageItem {
+  id: number;
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+  ip_address: string;
+  created_at: string | null;
+}
+
 interface ErrorStatsResponse {
   total_errors: number;
   critical_errors: number;
@@ -83,7 +93,10 @@ export default function Admin() {
   const [loginError, setLoginError] = useState<string | null>(null);
 
   // Portal State
-  const [activeTab, setActiveTab] = useState<'users' | 'visitors' | 'errors'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'visitors' | 'errors' | 'messages'>('users');
+  const [messagesData, setMessagesData] = useState<ContactMessageItem[]>([]);
+  const [messageSearch, setMessageSearch] = useState<string>('');
+  const [copiedMsgEmail, setCopiedMsgEmail] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
   const [userSearch, setUserSearch] = useState<string>('');
@@ -169,11 +182,16 @@ export default function Admin() {
     setLoading(true);
     try {
       const headers = getAdminHeaders();
-      const [uRes, vRes, eRes] = await Promise.allSettled([
+      const [uRes, vRes, eRes, mRes] = await Promise.allSettled([
         axios.get(`${API_URL}/admin/users`, { headers }),
         axios.get(`${API_URL}/admin/visitors/stats`, { headers }),
-        axios.get(`${API_URL}/admin/errors`, { headers })
+        axios.get(`${API_URL}/admin/errors`, { headers }),
+        axios.get(`${API_URL}/admin/contact-messages`, { headers })
       ]);
+
+      if (mRes.status === 'fulfilled' && Array.isArray(mRes.value.data)) {
+        setMessagesData(mRes.value.data);
+      }
 
       if (uRes.status === 'fulfilled' && uRes.value.data?.users) {
         setUserData(uRes.value.data);
@@ -287,6 +305,33 @@ export default function Admin() {
       };
     }
   }, [adminToken, autoRefresh]);
+
+    const handleCopyMsgEmail = (emailStr: string) => {
+    navigator.clipboard.writeText(emailStr);
+    setCopiedMsgEmail(emailStr);
+    setTimeout(() => setCopiedMsgEmail(null), 2500);
+  };
+
+  const handleDeleteMessage = async (id: number) => {
+    if (!window.confirm(`Delete inquiry #${id} from the database?`)) return;
+    try {
+      const headers = getAdminHeaders();
+      await axios.delete(`${API_URL}/admin/contact-messages/${id}`, { headers });
+      setMessagesData(prev => prev.filter(m => m.id !== id));
+      setActionNotice(`Contact inquiry #${id} has been deleted.`);
+      setTimeout(() => setActionNotice(null), 4000);
+    } catch (err: any) {
+      alert('Failed to delete message: ' + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  const getGmailReplyUrl = (emailStr: string, subj: string, visitorName: string) => {
+    const su = encodeURIComponent(`Re: ${subj} - ZyloRun Security Support`);
+    const body = encodeURIComponent(
+      `Hi ${visitorName},\n\nThank you for reaching out to the ZyloRun & Vovalyx engineering team regarding "${subj}".\n\n\n---\nBest regards,\nZyloRun Security Team\nzylorun.vovalyx@gmail.com\nhttps://www.vovalyx.in`
+    );
+    return `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(emailStr)}&su=${su}&body=${body}`;
+  };
 
   const triggerTestError = async () => {
     try {
@@ -516,7 +561,7 @@ export default function Admin() {
         )}
 
         {/* 4 Primary KPI Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <div 
             onClick={() => setActiveTab('users')}
             className={`cursor-pointer p-5 rounded-2xl border transition-all ${
@@ -578,7 +623,34 @@ export default function Admin() {
             </div>
           </div>
 
-          <div 
+                    <div 
+            onClick={() => setActiveTab('messages')}
+            className={`cursor-pointer p-5 rounded-2xl border transition-all ${
+              activeTab === 'messages' 
+                ? 'bg-slate-900 border-amber-500/50 shadow-lg shadow-amber-500/5 ring-1 ring-amber-500/20' 
+                : 'bg-slate-900/50 border-slate-800 hover:border-slate-700'
+            }`}
+          >
+            <div className="flex items-center justify-between text-slate-400 mb-2">
+              <span className="text-xs uppercase font-semibold tracking-wider">Contact Inquiries</span>
+              <Mail className="w-5 h-5 text-amber-400" />
+            </div>
+            <div className="text-3xl font-extrabold text-white flex items-center gap-2">
+              <span>{messagesData.length}</span>
+              {messagesData.length > 0 && (
+                <span className="text-xs font-normal text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/30">
+                  Inbox
+                </span>
+              )}
+            </div>
+            <div className="mt-2 text-xs text-slate-400 flex items-center gap-1.5">
+              <span className="text-amber-400 font-semibold">{messagesData.length} submitted</span>
+              <span>•</span>
+              <span>Gmail Desk</span>
+            </div>
+          </div>
+
+<div 
             onClick={() => setActiveTab('errors')}
             className={`cursor-pointer p-5 rounded-2xl border transition-all ${
               activeTab === 'errors' 
@@ -642,6 +714,18 @@ export default function Admin() {
           >
             <Bug className="w-4 h-4" />
             <span>Software Error Monitor ({errorData?.total_errors ?? 0})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('messages')}
+            className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${
+              activeTab === 'messages'
+                ? 'border-amber-500 text-amber-400 bg-slate-900/40 rounded-t-lg'
+                : 'border-transparent text-slate-400 hover:text-white'
+            }`}
+          >
+            <Mail className="w-4 h-4" />
+            <span>Contact Messages & Inquiries ({messagesData.length})</span>
           </button>
         </div>
 
@@ -961,6 +1045,147 @@ export default function Admin() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          </div>
+        )}
+        {/* TAB 4: CONTACT INQUIRIES & GMAIL DESK */}
+        {activeTab === 'messages' && (
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="relative flex-1 max-w-md">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={messageSearch}
+                  onChange={(e) => setMessageSearch(e.target.value)}
+                  placeholder="Search inquiries by name, email, subject, or message content..."
+                  className="w-full pl-9 pr-4 py-2 bg-slate-900/80 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 text-xs text-slate-400">
+                <span className="font-mono text-amber-400 font-semibold">{messagesData.length}</span> total messages received
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {messagesData
+                .filter(m => {
+                  const q = messageSearch.toLowerCase();
+                  return !q || 
+                    m.name.toLowerCase().includes(q) || 
+                    m.email.toLowerCase().includes(q) || 
+                    m.subject.toLowerCase().includes(q) || 
+                    m.message.toLowerCase().includes(q);
+                })
+                .length === 0 ? (
+                <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-12 text-center text-slate-400">
+                  <Mail className="w-10 h-10 text-amber-400/40 mx-auto mb-3" />
+                  <h3 className="text-base font-semibold text-white">No Contact Messages Found</h3>
+                  <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                    When visitors submit inquiries through the contact desk or click "Open in Gmail", their messages will be logged here.
+                  </p>
+                </div>
+              ) : (
+                messagesData
+                  .filter(m => {
+                    const q = messageSearch.toLowerCase();
+                    return !q || 
+                      m.name.toLowerCase().includes(q) || 
+                      m.email.toLowerCase().includes(q) || 
+                      m.subject.toLowerCase().includes(q) || 
+                      m.message.toLowerCase().includes(q);
+                  })
+                  .map((msg) => (
+                    <div 
+                      key={msg.id}
+                      className="bg-slate-900/70 border border-slate-800 hover:border-slate-700/80 rounded-2xl p-5 shadow-sm space-y-4 transition-all"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/60 pb-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center font-bold text-sm">
+                            {msg.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <div className="font-bold text-white text-sm flex items-center gap-2">
+                              <span>{msg.name}</span>
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-mono">
+                                #{msg.id}
+                              </span>
+                            </div>
+                            <div className="text-xs text-slate-400 flex items-center gap-1.5 font-mono">
+                              <span>{msg.email}</span>
+                              <button
+                                onClick={() => handleCopyMsgEmail(msg.email)}
+                                className="p-0.5 hover:text-white transition"
+                                title="Copy email address"
+                              >
+                                {copiedMsgEmail === msg.email ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 text-xs">
+                          <span className="px-2.5 py-1 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-medium">
+                            {msg.subject}
+                          </span>
+                          <span className="text-slate-500 font-mono text-[11px]">
+                            {msg.created_at ? new Date(msg.created_at).toLocaleString() : 'Recent'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Message Body */}
+                      <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800/80 text-xs text-slate-200 leading-relaxed font-sans whitespace-pre-wrap">
+                        {msg.message}
+                      </div>
+
+                      {/* Action Bar */}
+                      <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                        <div className="text-[11px] text-slate-500 font-mono flex items-center gap-2">
+                          <span>IP: {msg.ip_address}</span>
+                          <span>•</span>
+                          <span>Routing: zylorun.vovalyx@gmail.com</span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {/* Reply via Gmail */}
+                          <a
+                            href={getGmailReplyUrl(msg.email, msg.subject, msg.name)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-medium text-xs transition shadow-sm"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+                            </svg>
+                            Reply via Gmail (Web)
+                          </a>
+
+                          {/* Desktop mail */}
+                          <a
+                            href={`mailto:${encodeURIComponent(msg.email)}?subject=${encodeURIComponent('Re: ' + msg.subject)}`}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs border border-slate-700 transition"
+                          >
+                            <Mail className="w-3.5 h-3.5" />
+                            Desktop App
+                          </a>
+
+                          {/* Delete Message */}
+                          <button
+                            onClick={() => handleDeleteMessage(msg.id)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 font-medium text-xs border border-rose-500/30 transition"
+                            title="Delete inquiry"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+              )}
             </div>
           </div>
         )}

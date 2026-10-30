@@ -30,6 +30,21 @@ export default function Contact() {
       return;
     }
 
+    const localInquiry = {
+      id: Date.now(),
+      name: name.trim(),
+      email: email.trim(),
+      subject: subject,
+      message: message.trim(),
+      ip_address: 'Visitor (Web)',
+      created_at: new Date().toISOString()
+    };
+
+    try {
+      const existing = JSON.parse(localStorage.getItem('zylorun_contact_messages') || '[]');
+      localStorage.setItem('zylorun_contact_messages', JSON.stringify([localInquiry, ...existing]));
+    } catch (_) {}
+
     setIsSubmitting(true);
     try {
       await apiClient.post('/contact', {
@@ -40,7 +55,6 @@ export default function Contact() {
       });
       setSubmitted(true);
     } catch (err: any) {
-      // Even if backend is unavailable or rate limited, acknowledge receipt gracefully with direct mail link
       setSubmitted(true);
     } finally {
       setIsSubmitting(false);

@@ -1,6 +1,11 @@
 import axios from 'axios';
 
-export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+export const API_URL = 
+  import.meta.env.VITE_API_URL || 
+  import.meta.env.VITE_API_BASE_URL || 
+  (typeof window !== 'undefined' && (window.location.hostname.includes('vercel.app') || window.location.hostname.includes('zylorun'))
+    ? 'https://zylorun.onrender.com'
+    : 'http://localhost:8000');
 
 export const apiClient = axios.create({
   baseURL: API_URL

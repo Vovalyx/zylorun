@@ -1,25 +1,41 @@
-import { useEffect, Component, type ErrorInfo, type ReactNode } from 'react';
+import { useEffect, Component, type ErrorInfo, type ReactNode, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
 import Layout from './components/Layout';
 import './config'; // Ensures axios interceptor is loaded
 
-// Statically import pages so all routes and icons are bundled reliably
-// This completely prevents chunk load 404 errors across production deployments
+// Static public entry pages for instant landing & auth transitions
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import Dashboard from './pages/Dashboard';
-import Onboarding from './pages/Onboarding';
-import RiskPassport from './pages/RiskPassport';
-import CommitAudit from './pages/CommitAudit';
-import ProjectHub from './pages/ProjectHub';
-import LiveRunner from './pages/LiveRunner';
-import LogAnalyzer from './pages/LogAnalyzer';
-import EdgeDiagnostics from './pages/EdgeDiagnostics';
-import TargetSettings from './pages/TargetSettings';
-import SystemAssurance from './pages/SystemAssurance';
-import Admin from './pages/Admin';
+
+// Lazy-loaded heavy application & admin views for optimal initial page-load speed & minimal bundle weight
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Onboarding = lazy(() => import('./pages/Onboarding'));
+const RiskPassport = lazy(() => import('./pages/RiskPassport'));
+const CommitAudit = lazy(() => import('./pages/CommitAudit'));
+const ProjectHub = lazy(() => import('./pages/ProjectHub'));
+const LiveRunner = lazy(() => import('./pages/LiveRunner'));
+const LogAnalyzer = lazy(() => import('./pages/LogAnalyzer'));
+const EdgeDiagnostics = lazy(() => import('./pages/EdgeDiagnostics'));
+const TargetSettings = lazy(() => import('./pages/TargetSettings'));
+const SystemAssurance = lazy(() => import('./pages/SystemAssurance'));
+const Admin = lazy(() => import('./pages/Admin'));
+const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
+const TermsOfService = lazy(() => import('./pages/TermsOfService'));
+const SecurityPolicy = lazy(() => import('./pages/SecurityPolicy'));
+const Contact = lazy(() => import('./pages/Contact'));
+
+function PageFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-400">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+        <span className="text-xs uppercase tracking-widest text-slate-500 font-mono">Loading View...</span>
+      </div>
+    </div>
+  );
+}
 
 // Application Error Boundary to catch unexpected runtime exceptions and provide clean recovery
 interface ErrorBoundaryProps {
@@ -131,41 +147,50 @@ function App() {
         <BrowserRouter>
           <TokenExtractor />
           <VisitorTracker />
-          <Routes>
-            <Route path="/" element={<Landing />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
+          <Suspense fallback={<PageFallback />}>
+            <Routes>
+              <Route path="/" element={<Landing />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+              <Route path="/contact" element={<Contact />} />
+              <Route path="/contact-us" element={<Contact />} />
+              <Route path="/privacy" element={<PrivacyPolicy />} />
+              <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+              <Route path="/terms" element={<TermsOfService />} />
+              <Route path="/terms-of-service" element={<TermsOfService />} />
+              <Route path="/security" element={<SecurityPolicy />} />
 
-            {/* Standalone Protected Admin Security Portal */}
-            <Route path="/flash-admin" element={<Admin />} />
-            <Route path="/admin" element={<Admin />} />
-            <Route path="/admin/login" element={<Admin />} />
+              {/* Standalone Protected Admin Security Portal */}
+              <Route path="/flash-admin" element={<Admin />} />
+              <Route path="/admin" element={<Admin />} />
+              <Route path="/admin/login" element={<Admin />} />
 
-            <Route element={<Layout />}>
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/hub" element={<ProjectHub />} />
-              <Route path="/hub/:repositoryId" element={<ProjectHub />} />
-              <Route path="/onboarding" element={<Onboarding />} />
-              <Route path="/passport" element={<RiskPassport />} />
-              <Route path="/repositories/:repositoryId/scans/:scanId/audit" element={<CommitAudit />} />
-              <Route path="/scanner" element={<LiveRunner />} />
-              <Route path="/analyzer" element={<LogAnalyzer />} />
-              <Route path="/diagnostics" element={<EdgeDiagnostics />} />
-              <Route path="/assurance" element={<SystemAssurance />} />
-              <Route path="/settings/targets" element={<TargetSettings />} />
+              <Route element={<Layout />}>
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/hub" element={<ProjectHub />} />
+                <Route path="/hub/:repositoryId" element={<ProjectHub />} />
+                <Route path="/onboarding" element={<Onboarding />} />
+                <Route path="/passport" element={<RiskPassport />} />
+                <Route path="/repositories/:repositoryId/scans/:scanId/audit" element={<CommitAudit />} />
+                <Route path="/scanner" element={<LiveRunner />} />
+                <Route path="/analyzer" element={<LogAnalyzer />} />
+                <Route path="/diagnostics" element={<EdgeDiagnostics />} />
+                <Route path="/assurance" element={<SystemAssurance />} />
+                <Route path="/settings/targets" element={<TargetSettings />} />
 
-              {/* Legacy SecRunner & testing compatibility redirects */}
-              <Route path="/tests" element={<Navigate to="/assurance" replace />} />
-              <Route path="/system-tests" element={<Navigate to="/assurance" replace />} />
-              <Route path="/run" element={<Navigate to="/scanner" replace />} />
-              <Route path="/analyze" element={<Navigate to="/analyzer" replace />} />
-              <Route path="/command-run" element={<Navigate to="/diagnostics" replace />} />
-              <Route path="/command-prompt" element={<Navigate to="/scanner" replace />} />
-              <Route path="/manage-commands" element={<Navigate to="/settings/targets" replace />} />
-            </Route>
+                {/* Legacy SecRunner & testing compatibility redirects */}
+                <Route path="/tests" element={<Navigate to="/assurance" replace />} />
+                <Route path="/system-tests" element={<Navigate to="/assurance" replace />} />
+                <Route path="/run" element={<Navigate to="/scanner" replace />} />
+                <Route path="/analyze" element={<Navigate to="/analyzer" replace />} />
+                <Route path="/command-run" element={<Navigate to="/diagnostics" replace />} />
+                <Route path="/command-prompt" element={<Navigate to="/scanner" replace />} />
+                <Route path="/manage-commands" element={<Navigate to="/settings/targets" replace />} />
+              </Route>
 
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
         </BrowserRouter>
       </ThemeProvider>
     </AppErrorBoundary>

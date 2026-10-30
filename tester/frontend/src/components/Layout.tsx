@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Shield, LayoutDashboard, GitBranch, Moon, Sun, LogOut, Bell, Compass, Terminal, FileCode, Globe, Server, CheckCircle2 } from 'lucide-react';
+import { Shield, LayoutDashboard, GitBranch, Moon, Sun, LogOut, Bell, Compass, Terminal, FileCode, Globe, Server, CheckCircle2, Mail } from 'lucide-react';
 import { useTheme } from '../context/useTheme';
 import { useState, useEffect, useRef } from 'react';
 import { apiClient } from '../config';
@@ -21,6 +21,7 @@ export default function Layout() {
     { name: 'Log & Code Analyzer', href: '/analyzer', icon: FileCode },
     { name: 'Edge Diagnostics', href: '/diagnostics', icon: Globe },
     { name: 'Target Inventory', href: '/settings/targets', icon: Server },
+    { name: 'Contact & Support', href: '/contact', icon: Mail },
   ];
 
   useEffect(() => {
@@ -217,8 +218,14 @@ export default function Layout() {
               Vovalyx — Engineer your vision.
             </a>
           </div>
-          <div className="text-slate-400 dark:text-slate-500 flex items-center gap-2">
-            <span>Powered by Vovalyx</span>
+          <div className="text-slate-400 dark:text-slate-500 flex flex-wrap items-center gap-3">
+            <Link to="/privacy" className="hover:text-brand-500 hover:underline">Privacy</Link>
+            <span>&bull;</span>
+            <Link to="/terms" className="hover:text-brand-500 hover:underline">Terms</Link>
+            <span>&bull;</span>
+            <Link to="/security" className="hover:text-brand-500 hover:underline">Security</Link>
+            <span>&bull;</span>
+            <Link to="/contact" className="hover:text-brand-500 hover:underline font-medium text-brand-400">Contact Support</Link>
             <span>&bull;</span>
             <a 
               href="https://www.vovalyx.in/" 

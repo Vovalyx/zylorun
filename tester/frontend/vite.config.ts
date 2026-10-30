@@ -28,6 +28,9 @@ export default defineConfig({
             if (id.includes('lucide-react')) {
               return 'vendor-icons';
             }
+            if (id.includes('jspdf') || id.includes('html2canvas') || id.includes('canvg') || id.includes('fflate')) {
+              return 'vendor-pdf';
+            }
           }
         }
       }

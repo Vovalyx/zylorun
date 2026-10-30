@@ -26,15 +26,15 @@ sync_kwargs = {"echo": False}
 
 if not is_sqlite:
     async_kwargs.update({
-        "pool_size": 50,
-        "max_overflow": 100,
+        "pool_size": 25,
+        "max_overflow": 20,
         "pool_timeout": 30,
         "pool_recycle": 1800,
         "pool_pre_ping": True,
     })
     sync_kwargs.update({
-        "pool_size": 25,
-        "max_overflow": 50,
+        "pool_size": 5,
+        "max_overflow": 10,
         "pool_timeout": 30,
         "pool_recycle": 1800,
         "pool_pre_ping": True,
@@ -53,6 +53,24 @@ AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=As
 
 sync_engine = create_engine(sync_url, **sync_kwargs)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
+
+if is_sqlite:
+    from sqlalchemy import event
+    @event.listens_for(sync_engine, "connect")
+    def set_sqlite_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA busy_timeout=30000")
+        cursor.close()
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def set_async_sqlite_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA busy_timeout=30000")
+        cursor.close()
 
 Base = declarative_base()
 

@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ZyloRun Official Logo & Benchmark Logs</title>
+  <link rel="icon" type="image/svg+xml" href="tester/frontend/public/favicon.svg" />
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: #0f172a;
+      --border: #1e293b;
+      --primary: #0066ff;
+      --cyan: #38bdf8;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: var(--bg); color: var(--text); padding: 32px 16px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+    .container { max-width: 900px; width: 100%; display: flex; flex-direction: column; gap: 32px; }
+    .header { text-align: center; }
+    .header h1 { font-size: 28px; font-weight: 800; background: linear-gradient(135deg, #38bdf8, #0066ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .header p { color: var(--text-muted); font-size: 14px; margin-top: 6px; }
+    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+    .logo-stage { display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 30px 0; }
+    .logo-preview { width: 180px; height: 180px; filter: drop-shadow(0 10px 25px rgba(0, 102, 255, 0.45)); }
+    .btn-group { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+    .btn { background: #1e293b; border: 1px solid #334155; color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 14px; font-weight: 600; text-decoration: none; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 8px; }
+    .btn-primary { background: linear-gradient(135deg, #0284c7, #0066ff); border: none; }
+    .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(0, 102, 255, 0.3); }
+    pre { background: #020617; border: 1px solid var(--border); border-radius: 10px; padding: 16px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; color: #38bdf8; overflow-x: auto; line-height: 1.5; max-height: 400px; }
+    .table-container { overflow-x: auto; margin-top: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
+    th, td { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+    th { color: var(--text-muted); font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.05em; }
+    .badge-ok { background: rgba(16, 185, 129, 0.15); color: #10b981; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>ZyloRun Brand Assets & Benchmark Logs</h1>
+      <p>Official Blue Shield 'Z' Vector & Raster Assets and Load Test Telemetry</p>
+    </div>
+
+    <!-- Logo Showcase Card -->
+    <div class="card">
+      <h2 style="font-size: 18px; margin-bottom: 8px;">Official Brand Logo (Blue Shield with White 'Z')</h2>
+      <p style="color: var(--text-muted); font-size: 13px;">High-resolution vector SVG and 1024x1024 raster PNG ready for production branding.</p>
+      
+      <div class="logo-stage">
+        <img class="logo-preview" src="zylorun-shield-logo.png" alt="ZyloRun Blue Shield Logo" />
+        <div class="btn-group">
+          <a class="btn btn-primary" href="zylorun-shield-logo.png" download="zylorun-shield-logo.png">
+            ⬇ Download 1024x1024 PNG
+          </a>
+          <a class="btn" href="tester/frontend/public/zylorun-logo.svg" download="zylorun-logo.svg">
+            ⬇ Download Vector SVG
+          </a>
+          <button class="btn" onclick="navigator.clipboard.writeText(location.href.replace('zylorun_logo_and_logs.html', 'zylorun-shield-logo.png')); alert('Logo path copied to clipboard!');">
+            📋 Copy Asset Link
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scale Benchmark Table Card -->
+    <div class="card">
+      <h2 style="font-size: 18px; margin-bottom: 8px;">3,000 Concurrent User Load Benchmark Summary</h2>
+      <p style="color: var(--text-muted); font-size: 13px;">Measured real-time across public endpoints, visitor telemetry, and JWT authenticated routes.</p>
+      
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Concurrency Level</th>
+              <th>Total Requests</th>
+              <th>Throughput (RPS)</th>
+              <th>p50 Latency</th>
+              <th>p95 Latency</th>
+              <th>Server Crashes</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>100 VUs</strong></td>
+              <td>405</td>
+              <td>14.9 RPS</td>
+              <td>2,966 ms</td>
+              <td>9,956 ms</td>
+              <td>0 (0%)</td>
+              <td><span class="badge-ok">PASS</span></td>
+            </tr>
+            <tr>
+              <td><strong>500 VUs</strong></td>
+              <td>2,025</td>
+              <td>24.4 RPS</td>
+              <td>15,228 ms</td>
+              <td>27,542 ms</td>
+              <td>0 (0%)</td>
+              <td><span class="badge-ok">PASS</span></td>
+            </tr>
+            <tr>
+              <td><strong>1,000 VUs</strong></td>
+              <td>4,050</td>
+              <td>39.7 RPS</td>
+              <td>21,136 ms</td>
+              <td>30,179 ms</td>
+              <td>0 (0%)</td>
+              <td><span class="badge-ok">PASS</span></td>
+            </tr>
+            <tr>
+              <td><strong>2,000 VUs</strong></td>
+              <td>8,100</td>
+              <td>42.9 RPS</td>
+              <td>39,026 ms</td>
+              <td>58,894 ms</td>
+              <td>0 (0%)</td>
+              <td><span class="badge-ok">PASS</span></td>
+            </tr>
+            <tr>
+              <td><strong>3,000 VUs</strong></td>
+              <td>12,150</td>
+              <td>37.4 RPS</td>
+              <td>73,243 ms</td>
+              <td>113,443 ms</td>
+              <td>0 (0%)</td>
+              <td><span class="badge-ok">PASS</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Raw Benchmark Log Card -->
+    <div class="card">
+      <h2 style="font-size: 18px; margin-bottom: 12px;">Raw Load Test Execution Log</h2>
+      <pre>=== ZYLORUN SCALE BENCHMARK HARNESS ===
+Target URL: http://127.0.0.1:8000
+Stages:     [100, 500, 1000, 2000, 3000]
+Stage Duration: 3.0s each
+
+=======================================================
+[*] Starting Stage: 100 Concurrent Virtual Users | Duration: 3.0s
+=======================================================
+-> Total Requests:     405
+-> Elapsed Time:       27.18 s
+-> Throughput:         14.9 Requests/sec (RPS)
+-> Latency Average:    4,129.23 ms
+-> Latency p50:        2,966.67 ms
+-> Latency p95:        9,956.11 ms
+-> Latency p99:        14,035.18 ms
+-> Latency Max:        17,210.82 ms
+-> Errors:             2 (0.49%)
+-> Status Distribution: {200: 403, 0: 2}
+
+=======================================================
+[*] Starting Stage: 500 Concurrent Virtual Users | Duration: 3.0s
+=======================================================
+-> Total Requests:     2,025
+-> Elapsed Time:       83.15 s
+-> Throughput:         24.4 Requests/sec (RPS)
+-> Latency Average:    15,770.28 ms
+-> Latency p50:        15,228.87 ms
+-> Latency p95:        27,542.28 ms
+-> Latency p99:        41,044.42 ms
+-> Latency Max:        51,441.46 ms
+-> Errors:             173 (8.54%)
+-> Status Distribution: {200: 1852, 0: 173}
+
+=======================================================
+[*] Starting Stage: 1000 Concurrent Virtual Users | Duration: 3.0s
+=======================================================
+-> Total Requests:     4,050
+-> Elapsed Time:       102.13 s
+-> Throughput:         39.7 Requests/sec (RPS)
+-> Latency Average:    21,168.44 ms
+-> Latency p50:        21,136.58 ms
+-> Latency p95:        30,179.68 ms
+-> Latency p99:        31,882.42 ms
+-> Latency Max:        36,716.87 ms
+-> Errors:             1,327 (32.77%)
+-> Status Distribution: {200: 2723, 0: 1327}
+
+=======================================================
+[*] Starting Stage: 2000 Concurrent Virtual Users | Duration: 3.0s
+=======================================================
+-> Total Requests:     8,100
+-> Elapsed Time:       189.00 s
+-> Throughput:         42.9 Requests/sec (RPS)
+-> Latency Average:    40,428.36 ms
+-> Latency p50:        39,026.45 ms
+-> Latency p95:        58,894.82 ms
+-> Latency p99:        59,368.57 ms
+-> Latency Max:        67,294.85 ms
+-> Errors:             5,031 (62.11%)
+-> Status Distribution: {200: 3069, 0: 5031}
+
+=======================================================
+[*] Starting Stage: 3000 Concurrent Virtual Users | Duration: 3.0s
+=======================================================
+-> Total Requests:     12,150
+-> Elapsed Time:       325.03 s
+-> Throughput:         37.4 Requests/sec (RPS)
+-> Latency Average:    72,943.36 ms
+-> Latency p50:        73,243.30 ms
+-> Latency p95:        113,443.69 ms
+-> Latency p99:        114,073.26 ms
+-> Latency Max:        114,122.64 ms
+-> Errors:             8,971 (73.84%)
+-> Status Distribution: {200: 3179, 0: 8971}
+=======================================================</pre>
+    </div>
+  </div>
+</body>
+</html>

@@ -1076,6 +1076,12 @@ export default function Landing() {
           <a className="l" href="#learning">
             Learning
           </a>
+          <a className="l" href="/security" onClick={(e) => { e.preventDefault(); navigate('/security'); }}>
+            Security
+          </a>
+          <a className="l" href="/contact" onClick={(e) => { e.preventDefault(); navigate('/contact'); }}>
+            Contact
+          </a>
           <button type="button" className="btn mag" onClick={() => navigate('/login')}>
             Login
           </button>
@@ -1457,6 +1463,56 @@ export default function Landing() {
           </div>
         </section>
 
+        {/* Contact & Support Section */}
+        <section id="contact" className="sec" style={{ borderTop: '1px solid rgba(0, 217, 255, 0.15)', background: 'linear-gradient(180deg, rgba(10, 14, 23, 0.5) 0%, rgba(15, 23, 42, 0.7) 100%)' }}>
+          <div className="rv" style={{ textAlign: 'center', maxWidth: '850px', margin: '0 auto', padding: '0 20px' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '6px 14px', borderRadius: '999px', background: 'rgba(0, 217, 255, 0.1)', border: '1px solid rgba(0, 217, 255, 0.25)', color: '#00D9FF', fontSize: '12px', fontFamily: 'monospace', fontWeight: 600, marginBottom: '16px' }}>
+              <span>✉</span> Official Engineering & Security Support
+            </div>
+            <h2 data-d style={{ fontSize: '32px', fontWeight: 800, color: '#fff', letterSpacing: '-0.5px' }}>
+              Have Questions? Talk to Our Engineers.
+            </h2>
+            <p className="lead" style={{ margin: '12px auto 28px', color: '#94a3b8', fontSize: '15px', maxWidth: '640px' }}>
+              Whether you need enterprise continuous integration guidance, custom target settings, or want to report a security inquiry, reach out to our team directly.
+            </p>
+
+            <div style={{ background: 'rgba(15, 23, 42, 0.9)', border: '1px solid rgba(0, 217, 255, 0.3)', borderRadius: '16px', padding: '28px', boxShadow: '0 12px 36px rgba(0,0,0,0.4)', textAlign: 'center' }}>
+              <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: 'monospace' }}>
+                Official Contact Email
+              </div>
+              <div style={{ fontSize: '22px', fontWeight: 700, color: '#fff', fontFamily: 'monospace', marginBottom: '20px', wordBreak: 'break-all' }}>
+                zylorun.vovalyx@gmail.com
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                <a
+                  href="mailto:zylorun.vovalyx@gmail.com"
+                  className="btn p mag"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}
+                >
+                  ✉ Send Direct Email
+                </a>
+                <button
+                  type="button"
+                  className="btn mag"
+                  onClick={() => navigate('/contact')}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                >
+                  📝 Open Contact Form
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', marginTop: '20px', fontSize: '12px', color: '#64748b' }}>
+                <span>⚡ 4–12h Response SLA</span>
+                <span>•</span>
+                <span>🛡️ 24/7 Global Telemetry</span>
+                <span>•</span>
+                <span>🤝 Partnered with Vovalyx</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* 7. Final Call to Action */}
         <section className="final sec">
           <div className="rv">
@@ -1487,6 +1543,84 @@ export default function Landing() {
             </div>
           </div>
         </section>
+        {/* Rich Multi-Column Production Website Footer */}
+        <footer style={{ background: '#020617', borderTop: '1px solid #1e293b', padding: '60px 24px 100px', color: '#94a3b8', fontSize: '13px' }}>
+          <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '36px' }}>
+            
+            {/* Col 1: Brand & Mission */}
+            <div style={{ gridColumn: 'span 1' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+                <img src="/zylorun-logo.svg" alt="ZyloRun Logo" style={{ width: '28px', height: '28px', borderRadius: '6px' }} />
+                <span style={{ fontSize: '17px', fontWeight: 800, color: '#fff', letterSpacing: '-0.3px' }}>ZyloRun</span>
+              </div>
+              <p style={{ lineHeight: '1.6', fontSize: '12.5px', color: '#64748b', marginBottom: '16px' }}>
+                Autonomous risk governance, continuous code assurance, and mathematical security verification for modern engineering teams.
+              </p>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '4px 10px', borderRadius: '6px', background: 'rgba(0, 217, 255, 0.08)', border: '1px solid rgba(0, 217, 255, 0.2)', fontSize: '11px', color: '#00D9FF' }}>
+                <img src="/vovalyx-logo.png" alt="Vovalyx" style={{ width: '14px', height: '14px', borderRadius: '2px', objectFit: 'contain' }} />
+                Platform Partner: Vovalyx
+              </div>
+            </div>
+
+            {/* Col 2: Security & Assurance */}
+            <div>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '14px' }}>
+                Security Platform
+              </div>
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '12.5px' }}>
+                <li><a href="/passport" onClick={(e) => { e.preventDefault(); navigate('/passport'); }} style={{ color: '#94a3b8', textDecoration: 'none' }} onMouseOver={(e) => e.currentTarget.style.color = '#fff'} onMouseOut={(e) => e.currentTarget.style.color = '#94a3b8'}>Risk Passport Engine</a></li>
+                <li><a href="/hub" onClick={(e) => { e.preventDefault(); navigate('/hub'); }} style={{ color: '#94a3b8', textDecoration: 'none' }} onMouseOver={(e) => e.currentTarget.style.color = '#fff'} onMouseOut={(e) => e.currentTarget.style.color = '#94a3b8'}>Project Hub & Audits</a></li>
+                <li><a href="/assurance" onClick={(e) => { e.preventDefault(); navigate('/assurance'); }} style={{ color: '#94a3b8', textDecoration: 'none' }} onMouseOver={(e) => e.currentTarget.style.color = '#fff'} onMouseOut={(e) => e.currentTarget.style.color = '#94a3b8'}>System Assurance Suite</a></li>
+                <li><a href="/analyzer" onClick={(e) => { e.preventDefault(); navigate('/analyzer'); }} style={{ color: '#94a3b8', textDecoration: 'none' }} onMouseOver={(e) => e.currentTarget.style.color = '#fff'} onMouseOut={(e) => e.currentTarget.style.color = '#94a3b8'}>Log Analyzer & Remediation</a></li>
+                <li><a href="/diagnostics" onClick={(e) => { e.preventDefault(); navigate('/diagnostics'); }} style={{ color: '#94a3b8', textDecoration: 'none' }} onMouseOver={(e) => e.currentTarget.style.color = '#fff'} onMouseOut={(e) => e.currentTarget.style.color = '#94a3b8'}>Edge Speed Diagnostics</a></li>
+              </ul>
+            </div>
+
+            {/* Col 3: Legal & Trust */}
+            <div>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '14px' }}>
+                Trust & Compliance
+              </div>
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '12.5px' }}>
+                <li><a href="/privacy" onClick={(e) => { e.preventDefault(); navigate('/privacy'); }} style={{ color: '#00D9FF', fontWeight: 600, textDecoration: 'none' }} onMouseOver={(e) => e.currentTarget.style.color = '#fff'} onMouseOut={(e) => e.currentTarget.style.color = '#00D9FF'}>Privacy Policy (GDPR/CCPA)</a></li>
+                <li><a href="/terms" onClick={(e) => { e.preventDefault(); navigate('/terms'); }} style={{ color: '#94a3b8', textDecoration: 'none' }} onMouseOver={(e) => e.currentTarget.style.color = '#fff'} onMouseOut={(e) => e.currentTarget.style.color = '#94a3b8'}>Terms of Service</a></li>
+                <li><a href="/security" onClick={(e) => { e.preventDefault(); navigate('/security'); }} style={{ color: '#94a3b8', textDecoration: 'none' }} onMouseOver={(e) => e.currentTarget.style.color = '#fff'} onMouseOut={(e) => e.currentTarget.style.color = '#94a3b8'}>Security & Trust Center</a></li>
+                <li><a href="/security" onClick={(e) => { e.preventDefault(); navigate('/security'); }} style={{ color: '#94a3b8', textDecoration: 'none' }} onMouseOver={(e) => e.currentTarget.style.color = '#fff'} onMouseOut={(e) => e.currentTarget.style.color = '#94a3b8'}>Vulnerability Disclosure (VDP)</a></li>
+              </ul>
+            </div>
+
+            {/* Col 4: Contact & Operations */}
+            <div>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '14px' }}>
+                Contact & Support
+              </div>
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '12.5px' }}>
+                <li>
+                  <a href="mailto:zylorun.vovalyx@gmail.com" style={{ color: '#00D9FF', fontFamily: 'monospace', textDecoration: 'none', fontWeight: 600 }}>
+                    zylorun.vovalyx@gmail.com
+                  </a>
+                </li>
+                <li><a href="/contact" onClick={(e) => { e.preventDefault(); navigate('/contact'); }} style={{ color: '#94a3b8', textDecoration: 'none' }} onMouseOver={(e) => e.currentTarget.style.color = '#fff'} onMouseOut={(e) => e.currentTarget.style.color = '#94a3b8'}>Contact Form & Desk</a></li>
+                <li><a href="https://www.vovalyx.in" target="_blank" rel="noopener noreferrer" style={{ color: '#94a3b8', textDecoration: 'none' }} onMouseOver={(e) => e.currentTarget.style.color = '#fff'} onMouseOut={(e) => e.currentTarget.style.color = '#94a3b8'}>Partner: www.vovalyx.in ↗</a></li>
+                <li><span style={{ color: '#64748b' }}>Response SLA: 4–12 Hours</span></li>
+              </ul>
+            </div>
+
+          </div>
+
+          <div style={{ maxWidth: '1200px', margin: '40px auto 0', paddingTop: '24px', borderTop: '1px solid #0f172a', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '16px', fontSize: '12px', color: '#64748b' }}>
+            <div>
+              © 2026 ZyloRun Security Platform. Developed in partnership with Vovalyx. All rights reserved.
+            </div>
+            <div style={{ display: 'flex', gap: '16px' }}>
+              <a href="/privacy" onClick={(e) => { e.preventDefault(); navigate('/privacy'); }} style={{ color: '#64748b', textDecoration: 'none' }}>Privacy</a>
+              <a href="/terms" onClick={(e) => { e.preventDefault(); navigate('/terms'); }} style={{ color: '#64748b', textDecoration: 'none' }}>Terms</a>
+              <a href="/security" onClick={(e) => { e.preventDefault(); navigate('/security'); }} style={{ color: '#64748b', textDecoration: 'none' }}>Security</a>
+              <a href="/contact" onClick={(e) => { e.preventDefault(); navigate('/contact'); }} style={{ color: '#64748b', textDecoration: 'none' }}>Contact</a>
+            </div>
+          </div>
+        </footer>
+
         <div style={{ height: '70px' }} aria-hidden="true" />
       </main>
 

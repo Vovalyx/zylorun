@@ -13,7 +13,8 @@ from app.api.routes import (
     commands,
     runs,
     reports,
-    system_tests
+    system_tests,
+    contact
 )
 # import models to ensure they are registered with Base metadata
 from app.database import models
@@ -103,6 +104,18 @@ async def background_repo_poller():
             break
 
 
+async def background_visitor_flush():
+    while True:
+        try:
+            await asyncio.sleep(2)
+            from app.api.routes.admin import flush_visitor_logs_batch
+            await flush_visitor_logs_batch()
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            pass
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
@@ -187,9 +200,12 @@ async def lifespan(app: FastAPI):
             logger.warning("Default seeding encountered exception: %s", exc)
 
         poller_task = asyncio.create_task(background_repo_poller())
+        flush_task = asyncio.create_task(background_visitor_flush())
         yield
+        flush_task.cancel()
         poller_task.cancel()
         try:
+            await flush_task
             await poller_task
         except (asyncio.CancelledError, Exception):
             pass
@@ -229,47 +245,83 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
+import time
+from collections import defaultdict
+from fastapi.responses import JSONResponse
+from fastapi.middleware.gzip import GZipMiddleware
+
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+_RATE_LIMIT_BUCKETS = defaultdict(list)
+_RATE_LIMIT_MAX_AUTH = 60  # max 60 requests per minute per IP on auth routes
+_RATE_LIMIT_WINDOW = 60.0
+_LAST_ERROR_LOG_TIME = 0.0
+
+@app.middleware("http")
+async def rate_limiting_middleware(request: Request, call_next):
+    path = request.url.path
+    if path in ("/auth/login", "/auth/register", "/auth/admin-login"):
+        client_ip = request.client.host if request.client else "unknown"
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            client_ip = forwarded.split(",")[0].strip()
+
+        now = time.time()
+        timestamps = [t for t in _RATE_LIMIT_BUCKETS[client_ip] if t > now - _RATE_LIMIT_WINDOW]
+        if len(timestamps) >= _RATE_LIMIT_MAX_AUTH:
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many authentication requests. Please try again shortly."},
+                headers={"Retry-After": "60"}
+            )
+        timestamps.append(now)
+        _RATE_LIMIT_BUCKETS[client_ip] = timestamps
+
+    return await call_next(request)
+
+async def _record_system_error(err_type: str, severity: str, message: str, path: str, method: str, status_code: int, stack_trace: str = None):
+    try:
+        from app.database.models import SystemErrorLog
+        from app.database.session import AsyncSessionLocal
+        async with AsyncSessionLocal() as session:
+            err_entry = SystemErrorLog(
+                error_type=err_type,
+                severity=severity,
+                message=message,
+                stack_trace=stack_trace,
+                path=path,
+                method=method,
+                status_code=status_code
+            )
+            session.add(err_entry)
+            await session.commit()
+    except Exception:
+        pass
+
 @app.middleware("http")
 async def error_and_system_monitor_middleware(request: Request, call_next):
+    global _LAST_ERROR_LOG_TIME
     try:
         response = await call_next(request)
         if response.status_code >= 500:
-            try:
-                from app.database.models import SystemErrorLog
-                from app.database.session import AsyncSessionLocal
-                async with AsyncSessionLocal() as session:
-                    err_entry = SystemErrorLog(
-                        error_type="API_SERVER_ERROR",
-                        severity="CRITICAL",
-                        message=f"HTTP {response.status_code} occurred on {request.method} {request.url.path}",
-                        path=request.url.path,
-                        method=request.method,
-                        status_code=response.status_code
-                    )
-                    session.add(err_entry)
-                    await session.commit()
-            except Exception:
-                pass
+            now = time.time()
+            if now - _LAST_ERROR_LOG_TIME > 0.1:  # Throttle DB error log bursts to max 10/sec
+                _LAST_ERROR_LOG_TIME = now
+                asyncio.create_task(_record_system_error(
+                    "API_SERVER_ERROR", "CRITICAL",
+                    f"HTTP {response.status_code} occurred on {request.method} {request.url.path}",
+                    request.url.path, request.method, response.status_code
+                ))
         return response
     except Exception as exc:
         import traceback
-        try:
-            from app.database.models import SystemErrorLog
-            from app.database.session import AsyncSessionLocal
-            async with AsyncSessionLocal() as session:
-                err_entry = SystemErrorLog(
-                    error_type="UNHANDLED_EXCEPTION",
-                    severity="CRITICAL",
-                    message=str(exc),
-                    stack_trace=traceback.format_exc(),
-                    path=request.url.path,
-                    method=request.method,
-                    status_code=500
-                )
-                session.add(err_entry)
-                await session.commit()
-        except Exception:
-            pass
+        now = time.time()
+        if now - _LAST_ERROR_LOG_TIME > 0.1:
+            _LAST_ERROR_LOG_TIME = now
+            asyncio.create_task(_record_system_error(
+                "UNHANDLED_EXCEPTION", "CRITICAL",
+                str(exc), request.url.path, request.method, 500, traceback.format_exc()
+            ))
         raise exc
 
 app.include_router(auth.router)
@@ -283,6 +335,7 @@ app.include_router(commands.router)
 app.include_router(runs.router)
 app.include_router(reports.router)
 app.include_router(system_tests.router)
+app.include_router(contact.router)
 
 @app.get("/api/v1/health")
 @app.get("/health")

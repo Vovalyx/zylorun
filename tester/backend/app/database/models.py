@@ -32,7 +32,7 @@ class Repository(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True, nullable=False)
     url = Column(String, nullable=False)
-    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
 
     provider = Column(String, default="github")
     github_owner = Column(String, nullable=True)
@@ -80,7 +80,7 @@ class Commit(Base):
     author_email = Column(String)
     committed_at = Column(DateTime)
     parent_shas = Column(String)
-    repository_id = Column(Integer, ForeignKey("repositories.id", ondelete="CASCADE"), nullable=False)
+    repository_id = Column(Integer, ForeignKey("repositories.id", ondelete="CASCADE"), nullable=False, index=True)
 
     repository = relationship("Repository", back_populates="commits")
     scans = relationship("Scan", back_populates="commit", cascade="all, delete-orphan")
@@ -105,7 +105,7 @@ class Finding(Base):
     __tablename__ = "findings"
 
     id = Column(Integer, primary_key=True, index=True)
-    scan_id = Column(Integer, ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
+    scan_id = Column(Integer, ForeignKey("scans.id", ondelete="CASCADE"), nullable=False, index=True)
     fingerprint = Column(String, index=True, nullable=False)
     status = Column(String, default="NEW") # NEW, UNCHANGED, RESOLVED
     type = Column(String)  # secret, dependency, license, large_file
@@ -131,7 +131,7 @@ class WebhookDelivery(Base):
     __tablename__ = 'webhook_deliveries'
 
     id = Column(Integer, primary_key=True, index=True)
-    repository_id = Column(Integer, ForeignKey('repositories.id', ondelete='CASCADE'), nullable=False)
+    repository_id = Column(Integer, ForeignKey('repositories.id', ondelete='CASCADE'), nullable=False, index=True)
     event_type = Column(String, nullable=False)
     delivery_id = Column(String, index=True)
     status = Column(String, nullable=False)
@@ -160,9 +160,9 @@ class Notification(Base):
     __tablename__ = 'notifications'
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
-    repository_id = Column(Integer, ForeignKey('repositories.id', ondelete='CASCADE'), nullable=False)
-    scan_id = Column(Integer, ForeignKey('scans.id', ondelete='CASCADE'), nullable=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    repository_id = Column(Integer, ForeignKey('repositories.id', ondelete='CASCADE'), nullable=False, index=True)
+    scan_id = Column(Integer, ForeignKey('scans.id', ondelete='CASCADE'), nullable=True, index=True)
     type = Column(String, nullable=False)
     title = Column(String, nullable=False)
     message = Column(Text, nullable=False)
@@ -384,3 +384,15 @@ class SystemErrorLog(Base):
     resolved = Column(Boolean, default=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), index=True)
 
+
+
+class ContactMessage(Base):
+    __tablename__ = "contact_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    email = Column(String, nullable=False, index=True)
+    subject = Column(String, nullable=False)
+    message = Column(Text, nullable=False)
+    ip_address = Column(String, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), index=True)

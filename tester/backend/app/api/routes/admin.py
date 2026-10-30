@@ -539,13 +539,31 @@ async def admin_portal_login(
     raise HTTPException(status_code=401, detail="Invalid administrator credentials.")
 
 
+_VISITOR_LOG_QUEUE = []
+_VISITOR_LOG_LOCK = asyncio.Lock()
+
+async def flush_visitor_logs_batch():
+    global _VISITOR_LOG_QUEUE
+    if not _VISITOR_LOG_QUEUE:
+        return
+    async with _VISITOR_LOG_LOCK:
+        batch = _VISITOR_LOG_QUEUE[:]
+        _VISITOR_LOG_QUEUE.clear()
+    
+    if batch:
+        try:
+            async with AsyncSessionLocal() as session:
+                session.add_all(batch)
+                await session.commit()
+        except Exception as exc:
+            logger.warning("Batch flush visitor logs note: %s", exc)
+
 @router.post("/track-visit")
 async def track_visitor(
     request: Request,
-    payload: TrackVisitPayload,
-    db: AsyncSession = Depends(get_db)
+    payload: TrackVisitPayload
 ):
-    """Tracks anonymous and authenticated visitors browsing the software."""
+    """Tracks anonymous and authenticated visitors browsing the software via non-blocking batch queue."""
     try:
         forwarded = request.headers.get("x-forwarded-for")
         if forwarded:
@@ -577,8 +595,12 @@ async def track_visitor(
             username=username,
             created_at=datetime.now(timezone.utc).replace(tzinfo=None)
         )
-        db.add(visit)
-        await db.commit()
+        async with _VISITOR_LOG_LOCK:
+            _VISITOR_LOG_QUEUE.append(visit)
+            # If queue exceeds 100 entries, flush immediately in background
+            if len(_VISITOR_LOG_QUEUE) >= 100:
+                asyncio.create_task(flush_visitor_logs_batch())
+
         return {"status": "ok", "tracked": True}
     except Exception as e:
         logger.warning("track_visitor error: %s", e)

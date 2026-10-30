@@ -168,6 +168,15 @@ def is_safe_external_url(target_url: str) -> bool:
     except Exception:
         return False
 
+_HTTP_CLIENT_LIMITS = httpx.Limits(max_keepalive_connections=25, max_connections=150)
+_HTTP_CLIENT: Optional[httpx.AsyncClient] = None
+
+def get_http_client() -> httpx.AsyncClient:
+    global _HTTP_CLIENT
+    if _HTTP_CLIENT is None or _HTTP_CLIENT.is_closed:
+        _HTTP_CLIENT = httpx.AsyncClient(limits=_HTTP_CLIENT_LIMITS, timeout=12.0, follow_redirects=True)
+    return _HTTP_CLIENT
+
 @router.post("/url-speed-test")
 async def analyze_url_speed(
     req: UrlSpeedTestRequest,
@@ -200,41 +209,41 @@ async def analyze_url_speed(
 
     start_time = time.perf_counter()
     try:
-        async with httpx.AsyncClient(timeout=12.0, follow_redirects=True) as client:
-            res = await client.get(raw_url, headers=headers)
-            total_time_ms = round((time.perf_counter() - start_time) * 1000)
-            ttfb_ms = round(res.elapsed.total_seconds() * 1000) if hasattr(res, "elapsed") else total_time_ms
-            content_size = len(res.content)
-            status_code = res.status_code
+        client = get_http_client()
+        res = await client.get(raw_url, headers=headers)
+        total_time_ms = round((time.perf_counter() - start_time) * 1000)
+        ttfb_ms = round(res.elapsed.total_seconds() * 1000) if hasattr(res, "elapsed") else total_time_ms
+        content_size = len(res.content)
+        status_code = res.status_code
 
-            if total_time_ms < 1500 and status_code < 400:
-                speed_grade = "GREEN"
-                status_text = "Optimal / Fast Response"
-                badge_color = "#00e676"
-            elif total_time_ms <= 3000 and status_code < 400:
-                speed_grade = "YELLOW"
-                status_text = "Moderate / Average Response"
-                badge_color = "#ffab00"
-            else:
-                speed_grade = "RED"
-                status_text = "High Latency / Slow"
-                badge_color = "#ff3366"
+        if total_time_ms < 1500 and status_code < 400:
+            speed_grade = "GREEN"
+            status_text = "Optimal / Fast Response"
+            badge_color = "#00e676"
+        elif total_time_ms <= 3000 and status_code < 400:
+            speed_grade = "YELLOW"
+            status_text = "Moderate / Average Response"
+            badge_color = "#ffab00"
+        else:
+            speed_grade = "RED"
+            status_text = "High Latency / Slow"
+            badge_color = "#ff3366"
 
-            return {
-                "success": True,
-                "url": raw_url,
-                "status_code": status_code,
-                "total_time_ms": total_time_ms,
-                "ttfb_ms": ttfb_ms,
-                "content_size_bytes": content_size,
-                "speed_grade": speed_grade,
-                "status_text": status_text,
-                "badge_color": badge_color,
-                "server": res.headers.get("server", "Unknown"),
-                "content_type": res.headers.get("content-type", "Unknown"),
-                "encoding": res.headers.get("content-encoding", "None"),
-                "redirects": len(res.history)
-            }
+        return {
+            "success": True,
+            "url": raw_url,
+            "status_code": status_code,
+            "total_time_ms": total_time_ms,
+            "ttfb_ms": ttfb_ms,
+            "content_size_bytes": content_size,
+            "speed_grade": speed_grade,
+            "status_text": status_text,
+            "badge_color": badge_color,
+            "server": res.headers.get("server", "Unknown"),
+            "content_type": res.headers.get("content-type", "Unknown"),
+            "encoding": res.headers.get("content-encoding", "None"),
+            "redirects": len(res.history)
+        }
     except Exception as exc:
         total_time_ms = round((time.perf_counter() - start_time) * 1000)
         return {

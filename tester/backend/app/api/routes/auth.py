@@ -91,6 +91,9 @@ async def login(response: Response, form_data: OAuth2PasswordRequestForm = Depen
                     headers={"WWW-Authenticate": "Bearer"},
                 )
     
+    uname = str(user.username)
+    uemail = str(user.email)
+
     try:
         user.last_login_at = datetime.now(timezone.utc).replace(tzinfo=None)
         await db.commit()
@@ -99,9 +102,9 @@ async def login(response: Response, form_data: OAuth2PasswordRequestForm = Depen
 
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
+        data={"sub": uname}, expires_delta=access_token_expires
     )
-    return {"access_token": access_token, "token_type": "bearer", "username": user.username, "email": user.email}
+    return {"access_token": access_token, "token_type": "bearer", "username": uname, "email": uemail}
 
 @router.post("/reset-password")
 async def reset_password(req: PasswordResetRequest, db: AsyncSession = Depends(get_db)):

@@ -91,17 +91,21 @@ export default function Landing() {
         entries.forEach((x) => {
           if (x.isIntersecting) {
             x.target.classList.add('in');
-            x.target.querySelectorAll &&
+            if (x.target.querySelectorAll) {
+              x.target.querySelectorAll('.rv').forEach((el: any) => el.classList.add('in'));
               x.target.querySelectorAll('[data-d]').forEach((h: any) => dec(h));
+            }
             if ((x.target as HTMLElement).matches('[data-d]')) dec(x.target as HTMLElement);
             io.unobserve(x.target);
           }
         });
       },
-      { threshold: 0.15 }
+      { threshold: 0.1 }
     );
     document.querySelectorAll('.rv,.sec').forEach((n) => io.observe(n));
-    const revealTimer = setTimeout(() => document.querySelectorAll('.rv').forEach((n) => n.classList.add('in')), 3500);
+    const revealTimer = setTimeout(() => {
+      document.querySelectorAll('.rv,.sec').forEach((n) => n.classList.add('in'));
+    }, 1200);
 
     // Pointer: Xray lens, magnetic buttons, tilt cards
     const hero = document.querySelector('.hero') as HTMLElement;
@@ -544,7 +548,7 @@ export default function Landing() {
       termObserver.observe(o);
     })();
 
-    // Scroll-driven File Scanner (#scan)
+    // Interactive File Security Scanner (#scan)
     (function initFileScanner() {
       const sec = document.getElementById('scan');
       const fl = document.getElementById('files');
@@ -623,9 +627,9 @@ export default function Landing() {
         if (why) {
           why.textContent =
             p <= 0
-              ? 'Keep scrolling down. Each file is checked one at a time, and you will see why it passes or needs attention.'
+              ? 'Each file is checked one at a time to examine inputs, permissions, and detect vulnerabilities.'
               : done
-              ? 'Finished. Every file now has a result you can read: looks clean, needs review, or sample issue.'
+              ? 'Finished. Every file now has a clear diagnostic result: looks clean, needs review, or sample issue.'
               : si < 3
               ? SD[si]
               : d[0] + '. ' + d[2];
@@ -640,11 +644,9 @@ export default function Landing() {
         r._v.textContent = W[s];
       }
 
-      function u() {
-        if (!sec || !fl || !bm || !rg || !cf || !cs || !vd) return;
-        const rc = sec.getBoundingClientRect();
-        const tot = sec.offsetHeight - window.innerHeight;
-        const p = Math.min(1, Math.max(0, -rc.top / tot));
+      function updateProgress(p: number) {
+        if (!fl || !bm || !rg || !cf || !cs || !vd) return;
+        p = Math.min(1, Math.max(0, p));
         const f = p * D.length;
         const cur = Math.min(D.length - 1, Math.floor(f));
         const sub = f - cur;
@@ -673,53 +675,70 @@ export default function Landing() {
         });
 
         cf.textContent = p <= 0 ? 'Waiting' : done ? 'Analysis complete' : D[cur][0];
-        cs.textContent = p <= 0 ? 'Scroll to begin' : done ? 'All sample files reviewed' : ST[Math.min(3, Math.floor(sub * 4))];
+        cs.textContent = p <= 0 ? 'Ready to scan' : done ? 'All sample files reviewed' : ST[Math.min(3, Math.floor(sub * 4))];
         scanExtra(p, done, cur, sub);
         vd.textContent = done
-          ? 'Sample report ready. Some files looked clean, some need review and some show sample issues. These results are made up for this demo.'
+          ? 'Sample report ready. Clean files passed, highlighted findings require remediation review.'
           : '';
       }
 
-      window.addEventListener('scroll', u, { passive: true });
-      window.addEventListener('resize', u);
-      u();
+      let autoPlaying = false;
+      let autoRaf = 0;
+      let hasAutoPlayed = false;
 
-      // Play the scan for me auto-scroll
-      if (pl) {
-        let raf = 0;
-        function stop() {
-          cancelAnimationFrame(raf);
-          raf = 0;
+      function playScan() {
+        if (autoPlaying) {
+          cancelAnimationFrame(autoRaf);
+          autoPlaying = false;
           if (pl) pl.textContent = 'Play the scan for me';
-          document.documentElement.style.scrollBehavior = '';
+          return;
         }
-        ['wheel', 'touchstart', 'keydown'].forEach((ev) =>
-          window.addEventListener(ev, () => {
-            if (raf) stop();
-          }, { passive: true })
-        );
-
-        pl.onclick = () => {
-          if (raf) {
-            stop();
-            return;
+        autoPlaying = true;
+        if (pl) pl.textContent = 'Pause scan';
+        let t0 = 0;
+        const duration = 4800; // 4.8 seconds smooth interactive scan
+        function step(t: number) {
+          if (!t0) t0 = t;
+          const k = Math.min(1, (t - t0) / duration);
+          updateProgress(k);
+          if (k < 1 && autoPlaying) {
+            autoRaf = requestAnimationFrame(step);
+          } else {
+            autoPlaying = false;
+            if (pl) pl.textContent = 'Replay scan';
           }
-          const y0 = sec.getBoundingClientRect().top + window.scrollY;
-          const tot = sec.offsetHeight - window.innerHeight;
-          let t0 = 0;
-          pl.textContent = 'Stop the scan';
-          document.documentElement.style.scrollBehavior = 'auto';
-          function s(t: number) {
-            if (!t0) t0 = t;
-            const k = Math.min(1, (t - t0) / 44000);
-            window.scrollTo(0, y0 + tot * k);
-            if (k < 1 && raf) raf = requestAnimationFrame(s);
-            else stop();
-          }
-          window.scrollTo(0, y0);
-          raf = requestAnimationFrame(s);
-        };
+        }
+        autoRaf = requestAnimationFrame(step);
       }
+
+      function onScroll() {
+        if (autoPlaying || !sec) return;
+        const rc = sec.getBoundingClientRect();
+        const vh = window.innerHeight;
+        // Smoothly progress as user scrolls past section
+        const p = Math.min(1, Math.max(0, (vh * 0.7 - rc.top) / (rc.height + vh * 0.3)));
+        updateProgress(p);
+      }
+
+      window.addEventListener('scroll', onScroll, { passive: true });
+      window.addEventListener('resize', onScroll);
+      updateProgress(0);
+
+      if (pl) {
+        pl.onclick = playScan;
+      }
+
+      // Auto-trigger smooth scan once when entering view
+      const scanObserver = new IntersectionObserver(
+        (entries) => {
+          if (entries[0].isIntersecting && !hasAutoPlayed) {
+            hasAutoPlayed = true;
+            playScan();
+          }
+        },
+        { threshold: 0.2 }
+      );
+      scanObserver.observe(sec);
     })();
 
     // Rail + Journey + Gauge
@@ -869,7 +888,7 @@ export default function Landing() {
           --blue:#087CFF;--cy:#00D9FF;--vi:#795BFF;--tx:#F2F7FF;--tx2:#9CB0CA;--ok:#37D6A0;--warn:#FFBD66;
           --ease:cubic-bezier(.22,1,.36,1);color-scheme:dark;box-sizing:border-box;
           background:var(--bg);color:var(--tx);font:16px/1.6 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;
-          overflow-x:hidden;min-height:100vh;position:relative;
+          overflow-x:clip;min-height:100vh;position:relative;
         }
         .zylorun-landing-root *{box-sizing:border-box}
         .zylorun-landing-root h1,.zylorun-landing-root h2,.zylorun-landing-root h3{font-family:"Space Grotesk",Inter,system-ui,sans-serif;line-height:1.05;margin:0;letter-spacing:-.02em}
@@ -965,8 +984,8 @@ export default function Landing() {
         .bar{height:3px;background:rgba(67,150,255,.15)}.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--blue),var(--cy));box-shadow:0 0 10px var(--cy);transition:width .4s}
         .tc{display:flex;gap:10px;padding:12px 14px;border-top:1px solid var(--bd);flex-wrap:wrap;align-items:center}.tc small{color:var(--tx2);margin-left:auto}
         .ok{color:var(--ok)}.wn{color:var(--warn)}pre div{animation:ln .35s var(--ease)}@keyframes ln{from{opacity:0;transform:translateX(-12px)}}
-        .scan{height:800vh;padding:0 20px}
-        .scanin{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;justify-content:center;gap:22px;padding-top:70px;padding-bottom:84px}
+        .scan{min-height:auto;padding:70px 20px 90px;position:relative}
+        .scanin{position:relative;height:auto;display:flex;flex-direction:column;justify-content:flex-start;gap:22px;padding-top:10px;padding-bottom:20px}
         .scgrid{display:grid;grid-template-columns:1.1fr 1fr;gap:24px;align-items:stretch}
         .files{position:relative;background:#050c18;border:1px solid var(--bd);border-radius:12px;padding:8px;overflow:hidden}
         .fr{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:8px;transition:background .3s,opacity .3s;font-size:15px}
@@ -1021,7 +1040,7 @@ export default function Landing() {
         .fs{position:relative;width:120px;height:140px;margin:0 auto 24px}.fs svg{position:absolute;inset:0;width:100%;height:100%;filter:drop-shadow(0 0 22px var(--cy));animation:fl2 5s ease-in-out infinite}
         @keyframes fl2{50%{transform:translateY(-8px)}}.fs .pulse{width:100%;top:55%}
         footer{border-top:1px solid var(--bd);padding:26px 20px;text-align:center;color:var(--tx2);font-size:14px;background:var(--bg)}
-        .rv{opacity:1}.js .rv{opacity:0;transform:translateY(30px);transition:opacity .8s var(--ease),transform .8s var(--ease)}.js .rv.in{opacity:1;transform:none}
+        .rv{opacity:1}.js .rv{opacity:0;transform:translateY(30px);transition:opacity .8s var(--ease),transform .8s var(--ease)}.js .rv.in,.js .sec.in .rv,section:target .rv{opacity:1!important;transform:none!important}
         @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}html{scroll-behavior:auto}.js .rv{opacity:1;transform:none;filter:none}#boot{display:none}.st{opacity:1;transform:none}}
       `}</style>
 

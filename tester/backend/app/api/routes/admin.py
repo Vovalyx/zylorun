@@ -617,6 +617,7 @@ async def get_visitor_stats(
 ):
     """Returns analytics on the number of visitors and application traffic."""
     try:
+        await flush_visitor_logs_batch()
         total_res = await db.execute(select(func.count(VisitorLog.id)))
         total_visits = total_res.scalar() or 0
 

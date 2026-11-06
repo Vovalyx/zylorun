@@ -206,63 +206,23 @@ export default function Admin() {
         }
         setMessagesData(all);
       } else {
-        if (localMessages.length > 0) {
-          setMessagesData(localMessages);
-        } else if (messagesData.length === 0) {
-          setMessagesData([
-            {
-              id: 1,
-              name: 'Vovalyx Partner Lead',
-              email: 'vovalyx.company@gmail.com',
-              subject: 'Enterprise Integration & Telemetry',
-              message: 'Connecting autonomous static analysis and risk passport verification for Vovalyx platform clients.',
-              ip_address: '152.58.12.94',
-              created_at: new Date(Date.now() - 3600000).toISOString()
-            }
-          ]);
-        }
+        setMessagesData(localMessages);
       }
 
       if (uRes.status === 'fulfilled' && uRes.value.data?.users) {
         setUserData(uRes.value.data);
       } else if (!userData) {
-        // Resilient default while Render restarts
         setUserData({
-          total_users: 2,
-          active_users: 2,
-          admin_users: 1,
+          total_users: 0,
+          active_users: 0,
+          admin_users: 0,
           current_user: {
             id: 1,
             username: 'admin',
             email: 'admin@vovalyx.in',
             role: 'Admin'
           },
-          users: [
-            {
-              id: 1,
-              username: 'admin',
-              email: 'admin@vovalyx.in',
-              role: 'Admin',
-              is_active: true,
-              has_github: true,
-              repositories_count: 1,
-              created_at: new Date().toISOString(),
-              last_login_at: new Date().toISOString(),
-              is_current: true
-            },
-            {
-              id: 2,
-              username: '4mh24cs167',
-              email: '4mh24cs167@gmail.com',
-              role: 'Admin',
-              is_active: true,
-              has_github: true,
-              repositories_count: 1,
-              created_at: new Date(Date.now() - 86400000).toISOString(),
-              last_login_at: new Date().toISOString(),
-              is_current: false
-            }
-          ]
+          users: []
         });
       }
 
@@ -270,39 +230,12 @@ export default function Admin() {
         setVisitorData(vRes.value.data);
       } else if (!visitorData) {
         setVisitorData({
-          total_visits: 218,
-          unique_visitors: 54,
-          today_visits: 38,
-          active_visitors: 4,
-          top_paths: [
-            { path: '/', count: 96 },
-            { path: '/dashboard', count: 58 },
-            { path: '/scanner', count: 32 },
-            { path: '/analyzer', count: 20 },
-            { path: '/diagnostics', count: 12 }
-          ],
-          recent_visits: [
-            {
-              id: 101,
-              visitor_id: 'vis_node_alpha',
-              ip_address: '152.58.12.94',
-              user_agent: navigator.userAgent,
-              path: window.location.pathname,
-              referrer: 'https://www.vovalyx.in/',
-              username: 'admin',
-              created_at: new Date().toISOString()
-            },
-            {
-              id: 100,
-              visitor_id: 'vis_node_edge',
-              ip_address: '103.21.244.0',
-              user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-              path: '/dashboard',
-              referrer: 'https://zylorun-five.vercel.app/',
-              username: '4mh24cs167',
-              created_at: new Date(Date.now() - 120000).toISOString()
-            }
-          ]
+          total_visits: 0,
+          unique_visitors: 0,
+          today_visits: 0,
+          active_visitors: 0,
+          top_paths: [],
+          recent_visits: []
         });
       }
 

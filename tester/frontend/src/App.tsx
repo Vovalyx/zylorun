@@ -2,7 +2,7 @@ import { useEffect, Component, type ErrorInfo, type ReactNode, lazy, Suspense } 
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
 import Layout from './components/Layout';
-import './config'; // Ensures axios interceptor is loaded
+import { apiClient } from './config'; // Ensures axios interceptor is loaded
 
 // Static public entry pages for instant landing & auth transitions
 import Landing from './pages/Landing';
@@ -127,14 +127,12 @@ function VisitorTracker() {
         visitorId = 'vis_' + Math.random().toString(36).substring(2, 12);
         localStorage.setItem('zylorun_visitor_id', visitorId);
       }
-      import('./config').then(({ apiClient }) => {
-        apiClient.post('/admin/track-visit', {
-          visitor_id: visitorId,
-          path: location.pathname,
-          referrer: document.referrer || null,
-          user_agent: navigator.userAgent
-        }).catch(() => {});
-      });
+      apiClient.post('/admin/track-visit', {
+        visitor_id: visitorId,
+        path: location.pathname,
+        referrer: document.referrer || null,
+        user_agent: navigator.userAgent
+      }).catch(() => {});
     } catch (_) {}
   }, [location.pathname]);
   return null;

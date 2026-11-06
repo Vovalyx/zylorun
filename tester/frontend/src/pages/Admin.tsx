@@ -113,7 +113,7 @@ export default function Admin() {
 
   // Admin API Client with explicit admin authorization
   const getAdminHeaders = () => {
-    const token = adminToken || localStorage.getItem('admin_access_token') || localStorage.getItem('access_token');
+    const token = adminToken || localStorage.getItem('admin_access_token');
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
 

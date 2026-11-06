@@ -3,7 +3,12 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy import create_engine
 from app.config import settings
 
-raw_url = settings.DATABASE_URL or "sqlite+aiosqlite:///./test.db"
+SUPABASE_DEFAULT_URL = "postgresql+asyncpg://postgres.zrtplsfswxegtigdvery:Fm7P8s7umt4OqqWv@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres"
+raw_url = settings.DATABASE_URL or SUPABASE_DEFAULT_URL
+# Automatically promote to Supabase production database if raw_url is empty or defaulted to sqlite
+import os
+if not raw_url or ("sqlite" in raw_url and os.getenv("USE_LOCAL_SQLITE", "").lower() != "true"):
+    raw_url = SUPABASE_DEFAULT_URL
 
 # Render & Heroku provide postgres:// URLs; modern SQLAlchemy requires postgresql://
 if raw_url.startswith("postgres://"):

@@ -513,7 +513,7 @@ export default function Admin() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
       {/* Standalone Admin Top Navigation Bar */}
-      <header className="h-16 border-b border-slate-800 bg-slate-900/80 backdrop-blur px-6 flex items-center justify-between sticky top-0 z-50">
+      <header className="h-16 border-b border-slate-800 bg-slate-900/80 backdrop-blur px-4 sm:px-6 flex items-center justify-between sticky top-0 z-50">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-rose-500 to-cyan-500 flex items-center justify-center shadow-md">
             <ShieldCheck className="w-5 h-5 text-white" />
@@ -552,7 +552,7 @@ export default function Admin() {
       </header>
 
       {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-6 space-y-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
         {/* Banner with controls */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900/60 border border-slate-800 rounded-2xl p-5 shadow-sm">
           <div>
@@ -711,10 +711,10 @@ export default function Admin() {
         </div>
 
         {/* Tab Headers */}
-        <div className="flex border-b border-slate-800 gap-2">
+        <div className="flex border-b border-slate-800 gap-2 overflow-x-auto whitespace-nowrap pb-1 scrollbar-none">
           <button
             onClick={() => setActiveTab('users')}
-            className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${
+            className={`shrink-0 flex items-center gap-2 px-4 sm:px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${
               activeTab === 'users'
                 ? 'border-emerald-500 text-emerald-400 bg-slate-900/40 rounded-t-lg'
                 : 'border-transparent text-slate-400 hover:text-white'
@@ -726,7 +726,7 @@ export default function Admin() {
 
           <button
             onClick={() => setActiveTab('visitors')}
-            className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${
+            className={`shrink-0 flex items-center gap-2 px-4 sm:px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${
               activeTab === 'visitors'
                 ? 'border-cyan-500 text-cyan-400 bg-slate-900/40 rounded-t-lg'
                 : 'border-transparent text-slate-400 hover:text-white'
@@ -738,7 +738,7 @@ export default function Admin() {
 
           <button
             onClick={() => setActiveTab('errors')}
-            className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${
+            className={`shrink-0 flex items-center gap-2 px-4 sm:px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${
               activeTab === 'errors'
                 ? 'border-rose-500 text-rose-400 bg-slate-900/40 rounded-t-lg'
                 : 'border-transparent text-slate-400 hover:text-white'
@@ -750,7 +750,7 @@ export default function Admin() {
 
           <button
             onClick={() => setActiveTab('messages')}
-            className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${
+            className={`shrink-0 flex items-center gap-2 px-4 sm:px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${
               activeTab === 'messages'
                 ? 'border-amber-500 text-amber-400 bg-slate-900/40 rounded-t-lg'
                 : 'border-transparent text-slate-400 hover:text-white'

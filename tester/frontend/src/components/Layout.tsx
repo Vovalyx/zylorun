@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Shield, LayoutDashboard, GitBranch, Moon, Sun, LogOut, Bell, Compass, Terminal, FileCode, Globe, Server, CheckCircle2, Mail } from 'lucide-react';
+import { Shield, LayoutDashboard, GitBranch, Moon, Sun, LogOut, Bell, Compass, Terminal, FileCode, Globe, Server, CheckCircle2, Mail, Menu, X } from 'lucide-react';
 import { useTheme } from '../context/useTheme';
 import { useState, useEffect, useRef } from 'react';
 import { apiClient } from '../config';
@@ -9,6 +9,7 @@ export default function Layout() {
   const location = useLocation();
   const [notifications, setNotifications] = useState<any[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
 
   const navigation = [
@@ -65,8 +66,18 @@ export default function Layout() {
 
   return (
     <div className="flex h-screen bg-background-light dark:bg-background-dark">
+      {/* Mobile Backdrop */}
+      {mobileMenuOpen && (
+        <div 
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="w-64 border-r border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark flex flex-col">
+      <aside className={`fixed inset-y-0 left-0 z-50 w-64 border-r border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark flex flex-col transition-transform duration-300 ease-in-out md:static md:translate-x-0 ${
+        mobileMenuOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full md:translate-x-0'
+      }`}>
         <div className="h-16 flex items-center px-6 border-b border-border-light dark:border-border-dark">
           <img src="/zylorun-logo.svg" alt="Zylorun Logo" className="w-8 h-8 rounded-lg mr-3 shadow-md bg-slate-900 border border-slate-700/60 p-0.5" />
           <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-400 tracking-tight">
@@ -81,6 +92,7 @@ export default function Layout() {
               <Link
                 key={item.name}
                 to={item.href}
+                onClick={() => setMobileMenuOpen(false)}
                 className={`flex items-center px-4 py-3 rounded-lg transition-colors ${
                   isActive 
                     ? 'bg-brand-50 dark:bg-brand-900/20 text-brand-600 dark:text-brand-400 font-medium' 
@@ -130,11 +142,21 @@ export default function Layout() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-16 border-b border-border-light dark:border-border-dark bg-surface-light/50 dark:bg-surface-dark/50 backdrop-blur-sm flex items-center justify-between px-8 z-10">
-          <h1 className="text-xl font-semibold">
-            {navigation.find(n => location.pathname.startsWith(n.href))?.name || 'Overview'}
-          </h1>
+      <main className="flex-1 flex flex-col overflow-hidden min-w-0">
+        <header className="h-16 border-b border-border-light dark:border-border-dark bg-surface-light/50 dark:bg-surface-dark/50 backdrop-blur-sm flex items-center justify-between px-4 sm:px-6 md:px-8 z-10">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="p-2 -ml-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 rounded-lg md:hidden hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              aria-label="Toggle navigation drawer"
+            >
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+            <h1 className="text-lg sm:text-xl font-semibold truncate">
+              {navigation.find(n => location.pathname.startsWith(n.href))?.name || 'Overview'}
+            </h1>
+          </div>
           <div className="flex items-center space-x-4">
             
             <div className="relative" ref={notifRef}>
@@ -186,7 +208,7 @@ export default function Layout() {
 
           </div>
         </header>
-        <div className="flex-1 overflow-auto p-8">
+        <div className="flex-1 overflow-auto p-4 sm:p-6 md:p-8">
           <Outlet />
         </div>
 

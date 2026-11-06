@@ -3,9 +3,11 @@ import axios from 'axios';
 export const API_URL = 
   import.meta.env.VITE_API_URL || 
   import.meta.env.VITE_API_BASE_URL || 
-  (typeof window !== 'undefined' && (window.location.hostname.includes('vercel.app') || window.location.hostname.includes('zylorun'))
+  (typeof window !== 'undefined' && (window.location.hostname.includes('vercel.app') || window.location.hostname.includes('zylorun') || window.location.hostname.includes('onrender.com'))
     ? 'https://zylorun.onrender.com'
-    : 'http://localhost:8000');
+    : (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
+      ? `http://${window.location.hostname}:8000`
+      : 'http://localhost:8000');
 
 export const apiClient = axios.create({
   baseURL: API_URL

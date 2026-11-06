@@ -9,6 +9,7 @@ export default function Landing() {
   const [authError, setAuthError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [copiedContactEmail, setCopiedContactEmail] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleCopyContactEmail = () => {
     navigator.clipboard.writeText('zylorun.vovalyx@gmail.com');
@@ -926,7 +927,24 @@ export default function Landing() {
         .btn::after{content:"";position:absolute;top:0;bottom:0;width:40%;left:-60%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.35),transparent);transform:skewX(-20deg)}
         .btn:hover::after{left:130%;transition:left .7s var(--ease)}
         .btn:not(.p):hover{background:rgba(8,124,255,.14);border-color:var(--cy)}
-        @media(max-width:820px){nav a.l{display:none}nav{gap:10px}nav .btn{padding:8px 14px;white-space:nowrap;min-height:40px}}
+                .mob-toggle{display:none}
+        .mob-menu-overlay{display:none}
+        @media(max-width:820px){
+          nav a.l{display:none}
+          .desk-btns{display:none!important}
+          nav{justify-content:space-between;padding:10px 16px}
+          .mob-toggle{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;border:1px solid var(--bd);background:var(--bg2);color:var(--tx);cursor:pointer;transition:border-color .2s,background .2s}
+          .mob-toggle:hover{border-color:var(--cy);background:rgba(0,217,255,.08)}
+          .mob-menu-overlay{display:block;position:fixed;inset:56px 0 0 0;background:rgba(3,7,18,.85);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);z-index:99;animation:fadein .2s ease-out}
+          .mob-menu-dropdown{background:var(--bg2);border-bottom:1px solid var(--bd);padding:20px 20px 26px;display:flex;flex-direction:column;gap:14px;box-shadow:0 20px 40px rgba(0,0,0,.8)}
+          .mob-menu-dropdown a{color:var(--tx);text-decoration:none;font-size:16px;font-weight:600;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06);transition:color .2s}
+          .mob-menu-dropdown a:hover{color:var(--cy)}
+          .mob-menu-btns{display:flex;flex-direction:column;gap:10px;margin-top:8px}
+          .mob-menu-btns .btn{width:100%;justify-content:center;min-height:42px}
+          .vovalyx-fixed-footer{padding:8px 14px!important;gap:8px!important}
+          .vovalyx-fixed-footer .sub-text{display:none!important}
+        }
+        @keyframes fadein{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
         #gauge{position:fixed;right:18px;top:50%;transform:translateY(-50%);z-index:15;display:flex;flex-direction:column;gap:14px;font-size:11px}
         #gauge a{color:var(--tx2);text-decoration:none;display:flex;align-items:center;gap:8px;justify-content:flex-end;opacity:.55;transition:all .4s}
         #gauge a i{width:8px;height:8px;border-radius:50%;border:1px solid var(--cy);display:block;transition:all .4s}
@@ -1108,13 +1126,56 @@ export default function Landing() {
           <a className="l" href="/contact" onClick={(e) => { e.preventDefault(); navigate('/contact'); }}>
             Contact
           </a>
-          <button type="button" className="btn mag" onClick={() => navigate('/login')}>
-            Login
-          </button>
-          <button type="button" className="btn p mag" onClick={() => navigate('/register')}>
-            Get Started
+          <div className="desk-btns" style={{ display: 'inline-flex', gap: '10px' }}>
+            <button type="button" className="btn mag" onClick={() => navigate('/login')}>
+              Login
+            </button>
+            <button type="button" className="btn p mag" onClick={() => navigate('/register')}>
+              Get Started
+            </button>
+          </div>
+
+          <button 
+            type="button" 
+            className="mob-toggle" 
+            aria-label={mobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          >
+            {mobileMenuOpen ? (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            ) : (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+              </svg>
+            )}
           </button>
         </nav>
+
+        {mobileMenuOpen && (
+          <div className="mob-menu-overlay" onClick={() => setMobileMenuOpen(false)}>
+            <div className="mob-menu-dropdown" onClick={(e) => e.stopPropagation()}>
+              <a href="#top" onClick={() => setMobileMenuOpen(false)}>Home</a>
+              <a href="#features" onClick={() => setMobileMenuOpen(false)}>Features</a>
+              <a href="#terminal" onClick={() => setMobileMenuOpen(false)}>Tools</a>
+              <a href="#learning" onClick={() => setMobileMenuOpen(false)}>Learning</a>
+              <a href="/security" onClick={(e) => { e.preventDefault(); setMobileMenuOpen(false); navigate('/security'); }}>Security</a>
+              <a href="/contact" onClick={(e) => { e.preventDefault(); setMobileMenuOpen(false); navigate('/contact'); }}>Contact Desk</a>
+              <div className="mob-menu-btns">
+                <button type="button" className="btn" onClick={() => { setMobileMenuOpen(false); navigate('/login'); }}>
+                  Login
+                </button>
+                <button type="button" className="btn p" onClick={() => { setMobileMenuOpen(false); navigate('/register'); }}>
+                  Get Started
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* Right HUD Gauge */}
@@ -1681,6 +1742,7 @@ export default function Landing() {
 
       {/* Static / Fixed Highlighted Vovalyx Footer */}
       <footer
+        className="vovalyx-fixed-footer"
         onClick={() => window.open('https://www.vovalyx.in/', '_blank', 'noopener,noreferrer')}
         style={{
           position: 'fixed',
@@ -1747,7 +1809,7 @@ export default function Landing() {
           </span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '12px', color: '#9CA3AF' }}>
+        <div className="sub-text" style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '12px', color: '#9CA3AF' }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#37D6A0', boxShadow: '0 0 8px #37D6A0' }} />
             Official Platform Partner

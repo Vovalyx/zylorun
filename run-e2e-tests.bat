@@ -11,4 +11,9 @@ echo Running Interactive Dashboard & Button Interaction Tests...
 echo ========================================================
 "venv\Scripts\python.exe" scripts/run_dashboard_and_buttons_e2e.py
 echo.
+echo ========================================================
+echo Running Mobile Configuration, LAN Origin & Contact Flow E2E Tests...
+echo ========================================================
+"venv\Scripts\python.exe" scripts/run_mobile_and_lan_e2e.py
+echo.
 pause

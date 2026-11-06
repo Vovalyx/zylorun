@@ -3,7 +3,8 @@ import os
 import sys
 from datetime import datetime, timezone
 
-os.environ["DATABASE_URL"] = "postgresql+asyncpg://postgres:Fm7P8s7umt4OqqWv@db.zrtplsfswxegtigdvery.supabase.co:5432/postgres"
+if not os.environ.get("DATABASE_URL") and __name__ == "__main__":
+    os.environ["DATABASE_URL"] = "postgresql+asyncpg://postgres:Fm7P8s7umt4OqqWv@db.zrtplsfswxegtigdvery.supabase.co:5432/postgres"
 
 from app.database.session import AsyncSessionLocal, engine
 from app.database.models import User, Repository, Commit, Scan, Finding, RiskScore

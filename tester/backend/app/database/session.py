@@ -51,7 +51,12 @@ else:
 engine = create_async_engine(async_url, **async_kwargs)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
-sync_engine = create_engine(sync_url, **sync_kwargs)
+try:
+    sync_engine = create_engine(sync_url, **sync_kwargs)
+except Exception as exc:
+    import logging
+    logging.getLogger(__name__).warning("Synchronous engine creation with %s failed (%s). Falling back to sqlite:///./sql_app.db.", sync_url, exc)
+    sync_engine = create_engine("sqlite:///./sql_app.db", connect_args={"check_same_thread": False, "timeout": 30}, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
 
 if is_sqlite:

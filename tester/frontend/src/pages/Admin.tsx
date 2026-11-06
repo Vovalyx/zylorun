@@ -96,6 +96,8 @@ export default function Admin() {
   const [activeTab, setActiveTab] = useState<'users' | 'visitors' | 'errors' | 'messages'>('users');
   const [messagesData, setMessagesData] = useState<ContactMessageItem[]>([]);
   const [messageSearch, setMessageSearch] = useState<string>('');
+  const [visitorSearch, setVisitorSearch] = useState<string>('');
+  const [visitorFilterToday, setVisitorFilterToday] = useState<boolean>(false);
   const [copiedMsgEmail, setCopiedMsgEmail] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
@@ -504,6 +506,29 @@ export default function Admin() {
     return u.username.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || u.role.toLowerCase().includes(q);
   });
 
+  const isTodayDate = (dateStr: string | null) => {
+    if (!dateStr) return true;
+    try {
+      const d = new Date(dateStr).getTime();
+      return (Date.now() - d) <= 24 * 3600 * 1000;
+    } catch (_) {
+      return true;
+    }
+  };
+
+  const filteredVisitors = (visitorData?.recent_visits || []).filter(v => {
+    if (visitorFilterToday && !isTodayDate(v.created_at)) return false;
+    if (!visitorSearch.trim()) return true;
+    const q = visitorSearch.toLowerCase();
+    return (
+      (v.path && v.path.toLowerCase().includes(q)) ||
+      (v.ip_address && v.ip_address.toLowerCase().includes(q)) ||
+      (v.username && v.username.toLowerCase().includes(q)) ||
+      (v.user_agent && v.user_agent.toLowerCase().includes(q)) ||
+      (v.visitor_id && v.visitor_id.toLowerCase().includes(q))
+    );
+  });
+
   const filteredErrors = (errorData?.errors || []).filter(e => {
     if (!errorSearch.trim()) return true;
     const q = errorSearch.toLowerCase();
@@ -897,12 +922,48 @@ export default function Admin() {
             </div>
 
             <div className="bg-slate-900/60 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-              <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <Eye className="w-4 h-4 text-cyan-400" />
-                  <span>Recent Visitor Activity Feed (Latest 50 visits)</span>
-                </h3>
-                <span className="text-xs text-slate-400">Total Unique Visitors: <strong className="text-cyan-400">{visitorData?.unique_visitors ?? 0}</strong></span>
+              <div className="p-4 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Eye className="w-4 h-4 text-cyan-400" />
+                    <span>Recent Visitor Activity Feed (Latest 50 visits)</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Live logs of incoming software traffic, IP addresses, paths, and user sessions.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setVisitorFilterToday(!visitorFilterToday)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                      visitorFilterToday
+                        ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm'
+                        : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                    }`}
+                  >
+                    {visitorFilterToday ? `Filtering: Today (${visitorData?.today_visits ?? 0}) ✓` : `Show Today Only (${visitorData?.today_visits ?? 0})`}
+                  </button>
+
+                  <span className="text-xs text-slate-400 hidden md:inline">
+                    Total Unique: <strong className="text-cyan-400">{visitorData?.unique_visitors ?? 0}</strong>
+                  </span>
+                </div>
+              </div>
+
+              {/* Visitor Search Input */}
+              <div className="p-3 bg-slate-950/40 border-b border-slate-800/80">
+                <div className="relative max-w-md">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search by IP, route (/dashboard), username, or device..."
+                    value={visitorSearch}
+                    onChange={(e) => setVisitorSearch(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition"
+                  />
+                </div>
               </div>
 
               <div className="overflow-x-auto">
@@ -917,17 +978,34 @@ export default function Admin() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60">
-                    {(!visitorData?.recent_visits || visitorData.recent_visits.length === 0) ? (
+                    {(!filteredVisitors || filteredVisitors.length === 0) ? (
                       <tr>
                         <td colSpan={5} className="py-8 text-center text-slate-500">
-                          {loading ? 'Polling visitor telemetry...' : 'No visitor records captured yet. Traffic will appear automatically.'}
+                          {loading ? 'Polling visitor telemetry...' : 'No matching visitor records found.'}
                         </td>
                       </tr>
                     ) : (
-                      visitorData.recent_visits.map((v) => (
+                      filteredVisitors.map((v) => (
                         <tr key={v.id} className="hover:bg-slate-800/40 transition-colors">
-                          <td className="py-3.5 px-4 font-mono text-[11px] text-slate-400">
-                            {v.created_at ? new Date(v.created_at).toLocaleTimeString() : 'Just now'}
+                          <td className="py-3.5 px-4 font-mono text-[11px] text-slate-400 whitespace-nowrap">
+                            <div className="flex items-center gap-1.5">
+                              <span>
+                                {v.created_at
+                                  ? new Date(v.created_at).toLocaleString([], {
+                                      month: 'short',
+                                      day: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                      second: '2-digit'
+                                    })
+                                  : 'Just now'}
+                              </span>
+                              {isTodayDate(v.created_at) && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-bold uppercase tracking-wider">
+                                  Today
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="py-3.5 px-4 font-mono text-cyan-400 font-medium">
                             {v.path}

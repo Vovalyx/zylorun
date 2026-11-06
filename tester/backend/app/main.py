@@ -47,12 +47,15 @@ def ensure_schema_and_columns():
             if is_pg:
                 conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP;"))
                 conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP;"))
+                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR DEFAULT 'User';"))
             else:
                 cols = [r[1] for r in conn.execute(text("PRAGMA table_info(users)")).fetchall()]
                 if "created_at" not in cols:
                     conn.execute(text("ALTER TABLE users ADD COLUMN created_at TIMESTAMP;"))
                 if "last_login_at" not in cols:
                     conn.execute(text("ALTER TABLE users ADD COLUMN last_login_at TIMESTAMP;"))
+                if "role" not in cols:
+                    conn.execute(text("ALTER TABLE users ADD COLUMN role VARCHAR DEFAULT 'User';"))
 
         # Verify or seed dedicated Admin account
         db = SessionLocal()

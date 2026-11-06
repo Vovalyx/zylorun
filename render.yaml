@@ -10,6 +10,8 @@ services:
         value: production
       - key: FRONTEND_URL
         value: "*"
+      - key: DATABASE_URL
+        value: postgresql+asyncpg://postgres.zrtplsfswxegtigdvery:Fm7P8s7umt4OqqWv@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres
       - key: GITHUB_WEBHOOK_SECRET
         generateValue: true
       - key: SECRET_KEY

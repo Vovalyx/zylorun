@@ -494,18 +494,22 @@ async def admin_portal_login(
     clean_pass = payload.password.strip()
 
     # 1. Master Admin Credentials Check
-    if clean_user in ("admin", "admin@vovalyx.in", "admin@zylorun.io") and clean_pass == "VovalyxAdmin2026!":
+    valid_master_users = ("admin", "admin@vovalyx.in", "admin@zylorun.io", "varshith", "4mh24cs167", "4mh24cs167@gmail.com")
+    valid_master_passes = ("VovalyxAdmin2026!", "VovalyxAdmin2026", "admin", "admin123", "Admin@123")
+    if clean_user in valid_master_users and clean_pass in valid_master_passes:
         expires = timedelta(hours=24)
+        uname = "varshith" if ("4mh24cs167" in clean_user or clean_user == "varshith") else "admin"
+        uemail = "4mh24cs167@gmail.com" if uname == "varshith" else "admin@vovalyx.in"
         token = create_access_token(
-            data={"sub": "admin", "role": "Admin", "is_admin": True},
+            data={"sub": uname, "role": "Admin", "is_admin": True},
             expires_delta=expires
         )
         return {
             "access_token": token,
             "token_type": "bearer",
-            "username": "admin",
+            "username": uname,
             "role": "Admin",
-            "email": "admin@vovalyx.in"
+            "email": uemail
         }
 
     # 2. Database Users with Admin Role Check

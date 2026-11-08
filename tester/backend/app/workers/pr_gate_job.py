@@ -23,6 +23,7 @@ from app.database.session import AsyncSessionLocal
 from app.utils.github import git_environment
 from app.utils.github_publisher import (
     publish_github_check_complete,
+    publish_github_pr_comment,
     redact_secrets_from_log,
 )
 
@@ -128,7 +129,7 @@ async def run_pr_gate_job(pr_check_id: int):
                 conclusion = "neutral"
 
             details_url = (
-                f"https://gitflow-rose-eight.vercel.app/repositories/{repo.id}"
+                f"https://zylorun-five.vercel.app/repositories/{repo.id}"
                 f"/scans/pr/{pr_check.pr_number or pr_check.head_sha[:8]}"
             )
 
@@ -142,12 +143,24 @@ async def run_pr_gate_job(pr_check_id: int):
                 head_sha=pr_check.head_sha,
                 token=oauth_token,
                 conclusion=conclusion,
-                title=f"GitFlow Security Gate: {policy_status}",
+                title=f"ZyloRun Security Gate: {policy_status}",
                 summary_markdown=check_result["summary_markdown"],
                 details_url=details_url,
                 annotations=check_result["newly_introduced_actionable"],
                 check_run_id=check_run_id_val,
             )
+
+            # Also publish automated inline review comment directly to the PR discussion tab
+            if pr_check.pr_number and oauth_token:
+                try:
+                    await publish_github_pr_comment(
+                        repo_url=repo.url,
+                        pr_number=pr_check.pr_number,
+                        summary_markdown=check_result["summary_markdown"],
+                        token=oauth_token,
+                    )
+                except Exception as comment_err:
+                    logger.warning("Could not post PR review comment to PR #%s: %s", pr_check.pr_number, comment_err)
 
             # Re-verify PR check still exists before persisting
             current_check = (
@@ -185,7 +198,7 @@ async def run_pr_gate_job(pr_check_id: int):
                 current_check.status = "FAILED"
                 current_check.conclusion = "failure"
                 current_check.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
-                current_check.summary_markdown = f"GitFlow PR Security Gate encountered an execution error:\n\n`{err_msg}`"
+                current_check.summary_markdown = f"ZyloRun PR Security Gate encountered an execution error:\n\n`{err_msg}`"
                 await db.commit()
         finally:
             if temp_dir and os.path.exists(temp_dir):

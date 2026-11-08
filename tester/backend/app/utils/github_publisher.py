@@ -26,7 +26,7 @@ async def publish_github_check_start(
     repo_url: str,
     head_sha: str,
     token: Optional[str] = None,
-    check_name: str = "GitFlow Security Gate",
+    check_name: str = "ZyloRun Security Gate",
 ) -> Optional[int]:
     """Publishes an initial in-progress Check Run to GitHub."""
     if not token or not repo_url or not head_sha:
@@ -43,7 +43,7 @@ async def publish_github_check_start(
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
-        "User-Agent": "GitFlow-Security-Gate/1.0",
+        "User-Agent": "ZyloRun-Security-Gate/1.0",
     }
     payload = {
         "name": check_name,
@@ -87,7 +87,7 @@ async def publish_github_check_complete(
     details_url: Optional[str] = None,
     annotations: Optional[List[Dict[str, Any]]] = None,
     check_run_id: Optional[int] = None,
-    check_name: str = "GitFlow Security Gate",
+    check_name: str = "ZyloRun Security Gate",
 ) -> Dict[str, Any]:
     """Publishes completion to GitHub via Checks API (Option A) or Commit Status (Option B)."""
     if not token or not repo_url or not head_sha:
@@ -106,7 +106,7 @@ async def publish_github_check_complete(
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
-        "User-Agent": "GitFlow-Security-Gate/1.0",
+        "User-Agent": "ZyloRun-Security-Gate/1.0",
     }
 
     # Format annotations for GitHub Checks API (max 50 per batch)
@@ -123,7 +123,7 @@ async def publish_github_check_complete(
                 "end_line": line,
                 "annotation_level": level,
                 "message": a.get("message") or a.get("title") or "Security alert",
-                "title": f"GitFlow: {a.get('rule_id') or 'Security Finding'}",
+                "title": f"ZyloRun: {a.get('rule_id') or 'Security Finding'}",
             })
 
     output_payload = {
@@ -142,7 +142,7 @@ async def publish_github_check_complete(
                     "name": check_name,
                     "status": "completed",
                     "conclusion": conclusion,
-                    "details_url": details_url or "https://gitflow-rose-eight.vercel.app/",
+                    "details_url": details_url or "https://zylorun-five.vercel.app/",
                     "output": output_payload,
                 }
                 resp = await client.patch(patch_url, headers=headers, json=patch_payload)
@@ -157,7 +157,7 @@ async def publish_github_check_complete(
                 "head_sha": head_sha,
                 "status": "completed",
                 "conclusion": conclusion,
-                "details_url": details_url or "https://gitflow-rose-eight.vercel.app/",
+                "details_url": details_url or "https://zylorun-five.vercel.app/",
                 "output": output_payload,
             }
             resp = await client.post(post_url, headers=headers, json=post_payload)
@@ -175,7 +175,7 @@ async def publish_github_check_complete(
             status_desc = f"{title[:100]} (Status: {conclusion.upper()})"
             status_payload = {
                 "state": status_state,
-                "target_url": details_url or "https://gitflow-rose-eight.vercel.app/",
+                "target_url": details_url or "https://zylorun-five.vercel.app/",
                 "description": status_desc[:140],
                 "context": "gitflow/security-gate",
             }
@@ -193,3 +193,61 @@ async def publish_github_check_complete(
         safe_msg = redact_secrets_from_log(str(e))
         logger.error(f"Error publishing security check result to GitHub: {safe_msg}")
         return {"success": False, "method": "error", "error": safe_msg}
+
+
+async def publish_github_pr_comment(
+    repo_url: str,
+    pr_number: int,
+    summary_markdown: str,
+    token: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Posts or updates an automated review comment directly inside the GitHub PR conversation tab."""
+    if not token or not repo_url or not pr_number:
+        return {"success": False, "error": "Missing token, repo_url, or pr_number"}
+
+    try:
+        _, owner, repo = get_canonical_github_url(repo_url)
+    except Exception as e:
+        return {"success": False, "error": f"Invalid repo URL: {e}"}
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "ZyloRun-Security-Gate/2.0",
+    }
+
+    marker = "<!-- zylorun-pr-gate-comment -->"
+    body_with_marker = f"{marker}\n{summary_markdown}"
+
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            # Search for existing ZyloRun comment to update in place
+            comments_url = f"https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/comments"
+            res = await client.get(comments_url, headers=headers)
+            existing_comment_id = None
+            if res.status_code == 200:
+                comments = res.json()
+                for c in comments:
+                    if marker in c.get("body", ""):
+                        existing_comment_id = c.get("id")
+                        break
+
+            if existing_comment_id:
+                update_url = f"https://api.github.com/repos/{owner}/{repo}/issues/comments/{existing_comment_id}"
+                resp = await client.patch(update_url, headers=headers, json={"body": body_with_marker})
+                if resp.status_code in (200, 201):
+                    logger.info("Updated existing ZyloRun PR comment %s on %s/%s#%s", existing_comment_id, owner, repo, pr_number)
+                    return {"success": True, "action": "updated", "comment_id": existing_comment_id}
+            else:
+                resp = await client.post(comments_url, headers=headers, json={"body": body_with_marker})
+                if resp.status_code in (200, 201):
+                    new_id = resp.json().get("id")
+                    logger.info("Created ZyloRun PR comment %s on %s/%s#%s", new_id, owner, repo, pr_number)
+                    return {"success": True, "action": "created", "comment_id": new_id}
+
+            return {"success": False, "error": f"GitHub returned {resp.status_code}"}
+    except Exception as exc:
+        safe_msg = redact_secrets_from_log(str(exc))
+        logger.warning("Failed to publish PR comment to %s/%s#%s: %s", owner, repo, pr_number, safe_msg)
+        return {"success": False, "error": safe_msg}

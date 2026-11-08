@@ -1,0 +1,61 @@
+name: ZyloRun Security & Merge Gatekeeper
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main, master]
+
+jobs:
+  zylorun-gate:
+    name: ZyloRun Autonomous Risk Assurance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Trigger ZyloRun Pull Request Security Gate
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const repo = context.repo;
+            const head_sha = pr ? pr.head.sha : context.sha;
+            const base_sha = pr ? pr.base.sha : '';
+            const pr_number = pr ? pr.number : null;
+
+            console.log(`Running ZyloRun Security Gate for ${repo.owner}/${repo.repo} on commit ${head_sha.substring(0, 7)}`);
+
+            const webhookUrl = 'https://zylorun.onrender.com/webhooks/github';
+            const payload = {
+              action: context.payload.action || 'push',
+              repository: {
+                html_url: `https://github.com/${repo.owner}/${repo.repo}`,
+                clone_url: `https://github.com/${repo.owner}/${repo.repo}.git`,
+                full_name: `${repo.owner}/${repo.repo}`
+              },
+              pull_request: pr ? {
+                number: pr_number,
+                head: { sha: head_sha },
+                base: { sha: base_sha }
+              } : null,
+              after: head_sha
+            };
+
+            // Post to ZyloRun API
+            try {
+              const res = await fetch(webhookUrl, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-github-event': pr ? 'pull_request' : 'push'
+                },
+                body: JSON.stringify(payload)
+              });
+              const json = await res.json();
+              console.log('ZyloRun Response:', json);
+            } catch (err) {
+              console.warn('ZyloRun webhook notification:', err.message);
+            }

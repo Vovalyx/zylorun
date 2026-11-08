@@ -8,6 +8,34 @@ from app.scanners.models import FindingItem, ToolCoverage, is_test_or_benchmark_
 
 SECRET_PATTERNS = {
 
+    "SEC-SECRET-OPENAI": {
+        "title": "OpenAI / Model API Key Exposure",
+        "pattern": re.compile(r'\b(sk-(?:proj|live|test)?-[a-zA-Z0-9_\-]{32,120})\b'),
+        "severity": "Critical",
+        "confidence": "High",
+        "remediation": "Revoke this OpenAI key immediately on platform.openai.com -> API Keys. Use environment variables (OPENAI_API_KEY)."
+    },
+    "SEC-SECRET-ANTHROPIC": {
+        "title": "Anthropic Claude API Key Exposure",
+        "pattern": re.compile(r'\b(sk-ant-[a-zA-Z0-9_\-]{40,120})\b'),
+        "severity": "Critical",
+        "confidence": "High",
+        "remediation": "Revoke this key in the Anthropic Console. Migrate key to a secure secret vault or environment variable."
+    },
+    "SEC-SECRET-SUPABASE": {
+        "title": "Supabase Service Role / Admin JWT Exposure",
+        "pattern": re.compile(r'\b(eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[a-zA-Z0-9_\-]{40,}\.[a-zA-Z0-9_\-]{30,})\b'),
+        "severity": "Critical",
+        "confidence": "High",
+        "remediation": "Rotate your Supabase Service Role JWT secret in your Supabase Project Settings -> API."
+    },
+    "SEC-SECRET-DATABASE-URI": {
+        "title": "Database Connection URI with Hardcoded Password",
+        "pattern": re.compile(r'(?i)\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis):\/\/[^:\s\/]+:[^@\s\/]+@[a-zA-Z0-9\.\-]+(?:\:\d+)?\/[a-zA-Z0-9_\-\.]+'),
+        "severity": "Critical",
+        "confidence": "High",
+        "remediation": "Extract database credentials to DATABASE_URL in an uncommitted .env file or managed cloud secret."
+    },
     "SEC-SECRET-AWS": {
         "title": "AWS Access Key Exposure",
         "pattern": re.compile(r'(?i)\b(AKIA[0-9A-Z]{16})\b'),
@@ -290,3 +318,66 @@ def run_secret_scan(repo_path: str, fingerprint_generator) -> Tuple[List[Finding
         findings_count=len(findings)
     )
     return findings, coverage
+
+import math
+
+
+def calculate_shannon_entropy(data: str) -> float:
+    """Calculates the Shannon entropy of a string (measures randomness)."""
+    if not data:
+        return 0.0
+    entropy = 0.0
+    length = len(data)
+    for x in set(data):
+        p_x = float(data.count(x)) / length
+        if p_x > 0:
+            entropy += - p_x * math.log2(p_x)
+    return entropy
+
+
+def scan_content_for_secrets(raw_text: str, filename: str = "snippet.txt") -> List[Dict[str, Any]]:
+    """Scans arbitrary text or code content for known secret patterns and high-entropy credentials."""
+    findings = []
+    lines = raw_text.splitlines()
+
+    for line_idx, line in enumerate(lines, 1):
+        # 1. Pattern Matching
+        for rule_id, rule in SECRET_PATTERNS.items():
+            matches = rule["pattern"].findall(line)
+            for m in matches:
+                secret_str = m[0] if isinstance(m, tuple) else m
+                if not secret_str or is_sample_or_placeholder_credential(secret_str):
+                    continue
+                findings.append({
+                    "rule_id": rule_id,
+                    "title": rule["title"],
+                    "severity": rule["severity"],
+                    "confidence": rule["confidence"],
+                    "line_number": line_idx,
+                    "masked_secret": redact_secret(secret_str),
+                    "code_snippet": line.strip()[:200],
+                    "remediation": rule["remediation"],
+                    "filename": filename
+                })
+
+        # 2. High Entropy Detection on Credential Variables
+        entropy_match = re.search(r'(?i)\b(?:token|secret|api_?key|password|auth_?key)\s*[:=]\s*["\']([^"\']{20,})["\']', line)
+        if entropy_match:
+            candidate = entropy_match.group(1)
+            if not is_sample_or_placeholder_credential(candidate):
+                ent = calculate_shannon_entropy(candidate)
+                if ent >= 4.3 and not any(f["line_number"] == line_idx for f in findings):
+                    findings.append({
+                        "rule_id": "SEC-SECRET-ENTROPY",
+                        "title": "High-Entropy Hardcoded Secret Candidate",
+                        "severity": "High",
+                        "confidence": "Medium",
+                        "line_number": line_idx,
+                        "masked_secret": redact_secret(candidate),
+                        "code_snippet": line.strip()[:200],
+                        "remediation": "Move this high-entropy secret token into an environment variable or secret manager.",
+                        "entropy": round(ent, 2),
+                        "filename": filename
+                    })
+
+    return findings

@@ -14,7 +14,8 @@ from app.api.routes import (
     runs,
     reports,
     system_tests,
-    contact
+    contact,
+    fixes
 )
 # import models to ensure they are registered with Base metadata
 from app.database import models
@@ -339,6 +340,7 @@ app.include_router(runs.router)
 app.include_router(reports.router)
 app.include_router(system_tests.router)
 app.include_router(contact.router)
+app.include_router(fixes.router)
 
 @app.get("/api/v1/health")
 @app.get("/health")

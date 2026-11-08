@@ -19,7 +19,13 @@ import {
   FileDiff,
   Printer,
   Download,
-  Loader2
+  Loader2,
+  Sparkles,
+  KeyRound,
+  GitPullRequest,
+  Copy,
+  Check,
+  X
 } from 'lucide-react';
 import { apiClient } from '../config';
 
@@ -40,6 +46,128 @@ export default function CommitAudit() {
   const [selectedClassificationFilter, setSelectedClassificationFilter] = useState<string>('ALL');
 
   const pollIntervalRef = useRef<number | null>(null);
+
+  // 1. AI Auto-Fix State
+  const [selectedFixFinding, setSelectedFixFinding] = useState<any>(null);
+  const [fixModalOpen, setFixModalOpen] = useState(false);
+  const [fixPreviewLoading, setFixPreviewLoading] = useState(false);
+  const [fixPreviewData, setFixPreviewData] = useState<any>(null);
+  const [fixPrLoading, setFixPrLoading] = useState(false);
+  const [fixPrResult, setFixPrResult] = useState<any>(null);
+  const [fixError, setFixError] = useState<string | null>(null);
+
+  // 2. PR Gatekeeper Modal State
+  const [prGateModalOpen, setPrGateModalOpen] = useState(false);
+  const [workflowCopied, setWorkflowCopied] = useState(false);
+
+  // 3. Secret Guard Modal State
+  const [secretGuardOpen, setSecretGuardOpen] = useState(false);
+  const [secretInputText, setSecretInputText] = useState('');
+  const [secretScanLoading, setSecretScanLoading] = useState(false);
+  const [secretScanResult, setSecretScanResult] = useState<any>(null);
+
+  const handlePreviewAiFix = async (finding: any) => {
+    setSelectedFixFinding(finding);
+    setFixModalOpen(true);
+    setFixPreviewLoading(true);
+    setFixPreviewData(null);
+    setFixPrResult(null);
+    setFixError(null);
+    try {
+      const res = await apiClient.post(`/repositories/${repositoryId}/findings/${finding.id}/preview-fix`);
+      setFixPreviewData(res.data);
+    } catch (err: any) {
+      setFixError(err.response?.data?.detail || err.message || 'Failed to generate AI remediation preview.');
+    } finally {
+      setFixPreviewLoading(false);
+    }
+  };
+
+  const handleCreateAiPr = async () => {
+    if (!selectedFixFinding || fixPrLoading) return;
+    setFixPrLoading(true);
+    setFixError(null);
+    try {
+      const res = await apiClient.post(`/repositories/${repositoryId}/findings/${selectedFixFinding.id}/create-pr`, {
+        commit_message: `fix(security): resolve ${selectedFixFinding.rule_id} via ZyloRun AI Auto-Fix`
+      });
+      setFixPrResult(res.data);
+    } catch (err: any) {
+      setFixError(err.response?.data?.detail || err.message || 'Failed to create remediation Pull Request on GitHub.');
+    } finally {
+      setFixPrLoading(false);
+    }
+  };
+
+  const handleRunLiveSecretScan = async () => {
+    if (!secretInputText.trim() || secretScanLoading) return;
+    setSecretScanLoading(true);
+    try {
+      const res = await apiClient.post('/scanners/secrets/live-scan', {
+        content: secretInputText,
+        filename: 'manual_snippet.txt'
+      });
+      setSecretScanResult(res.data);
+    } catch (err: any) {
+      alert('Secret scan error: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setSecretScanLoading(false);
+    }
+  };
+
+  const WORKFLOW_SNIPPET = [
+    'name: ZyloRun Security & Merge Gatekeeper',
+    '',
+    'on:',
+    '  pull_request:',
+    '    types: [opened, synchronize, reopened]',
+    '  push:',
+    '    branches: [main, master]',
+    '',
+    'jobs:',
+    '  zylorun-gate:',
+    '    name: ZyloRun Autonomous Risk Assurance',
+    '    runs-on: ubuntu-latest',
+    '    steps:',
+    '      - name: Checkout Code',
+    '        uses: actions/checkout@v4',
+    '        with:',
+    '          fetch-depth: 0',
+    '',
+    '      - name: Trigger ZyloRun Security Gate',
+    '        uses: actions/github-script@v7',
+    '        with:',
+    '          script: |',
+    '            const pr = context.payload.pull_request;',
+    '            const repo = context.repo;',
+    '            const head_sha = pr ? pr.head.sha : context.sha;',
+    '            const webhookUrl = "https://zylorun.onrender.com/webhooks/github";',
+    '            const payload = {',
+    '              action: context.payload.action || "push",',
+    '              repository: {',
+    '                html_url: "https://github.com/" + repo.owner + "/" + repo.repo,',
+    '                clone_url: "https://github.com/" + repo.owner + "/" + repo.repo + ".git",',
+    '                full_name: repo.owner + "/" + repo.repo',
+    '              },',
+    '              pull_request: pr ? {',
+    '                number: pr.number,',
+    '                head: { sha: head_sha },',
+    '                base: { sha: pr.base.sha }',
+    '              } : null,',
+    '              after: head_sha',
+    '            };',
+    '            await fetch(webhookUrl, {',
+    '              method: "POST",',
+    '              headers: { "Content-Type": "application/json", "x-github-event": pr ? "pull_request" : "push" },',
+    '              body: JSON.stringify(payload)',
+    '            });'
+  ].join('\\n');
+
+  const handleCopyWorkflow = () => {
+    navigator.clipboard.writeText(WORKFLOW_SNIPPET);
+    setWorkflowCopied(true);
+    setTimeout(() => setWorkflowCopied(false), 3000);
+  };
 
   const handleDownloadPdf = async () => {
     if (!repositoryId || !scanId || downloadingPdf) return;
@@ -237,6 +365,24 @@ export default function CommitAudit() {
                   </>
                 )}
               </button>
+              <button
+                onClick={() => setPrGateModalOpen(true)}
+                className="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-semibold rounded-lg flex items-center space-x-1.5 transition-all shadow-sm cursor-pointer"
+                title="Configure GitHub Pull Request Security Gatekeeper"
+              >
+                <GitPullRequest className="w-3.5 h-3.5" />
+                <span>PR Gatekeeper</span>
+              </button>
+
+              <button
+                onClick={() => setSecretGuardOpen(true)}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-semibold rounded-lg flex items-center space-x-1.5 transition-colors border border-amber-500/30 cursor-pointer"
+                title="Launch Live Secret & Credential Leak Scanner"
+              >
+                <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                <span>Secret Guard</span>
+              </button>
+
               <button
                 onClick={() => window.print()}
                 className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-lg flex items-center space-x-1.5 transition-colors border border-slate-200 dark:border-slate-700"
@@ -835,6 +981,23 @@ export default function CommitAudit() {
                       </div>
                     )}
 
+                    {/* Autonomous AI Auto-Fix Action */}
+                    {!isResolved && (
+                      <div className="mt-3.5 pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                          <Sparkles className="w-3 h-3 text-purple-400" />
+                          <span>Autonomous AI Remediation Available</span>
+                        </div>
+                        <button
+                          onClick={() => handlePreviewAiFix(f)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white rounded-lg text-xs font-bold shadow-md shadow-purple-600/20 transition cursor-pointer"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+                          <span>✨ 1-Click AI Auto-Fix</span>
+                        </button>
+                      </div>
+                    )}
+
                     {f.references && f.references.length > 0 && (
                       <div className="mt-2 flex items-center space-x-3 text-[11px] text-brand-500">
                         {f.references.map((refUrl: string, rIdx: number) => (
@@ -1000,6 +1163,306 @@ export default function CommitAudit() {
           )}
         </div>
       </div>
+
+      {/* ========================================================================= */}
+      {/* 1. AUTONOMOUS AI AUTO-FIX MODAL                                          */}
+      {/* ========================================================================= */}
+      {fixModalOpen && selectedFixFinding && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-slate-950/50">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-purple-600 to-cyan-500 flex items-center justify-center text-white shadow-md shadow-purple-600/30">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <span>Autonomous AI Remediation</span>
+                    <span className="text-xs px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 font-mono">
+                      {selectedFixFinding.rule_id}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    {selectedFixFinding.file_path}:{selectedFixFinding.line_number || 1}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setFixModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-4 text-sm">
+              {fixPreviewLoading ? (
+                <div className="py-12 flex flex-col items-center justify-center space-y-3 text-slate-400">
+                  <Loader2 className="w-8 h-8 text-purple-400 animate-spin" />
+                  <p className="text-sm font-medium">ZyloRun AI is analyzing code context & generating verified patch...</p>
+                </div>
+              ) : fixError ? (
+                <div className="p-4 bg-red-500/10 border border-red-500/30 text-red-300 rounded-xl text-xs space-y-1">
+                  <strong>Remediation Notice:</strong>
+                  <p>{fixError}</p>
+                </div>
+              ) : fixPreviewData ? (
+                <>
+                  <div className="p-3.5 bg-purple-950/30 border border-purple-500/30 rounded-xl space-y-1.5">
+                    <div className="text-xs uppercase font-bold text-purple-400 tracking-wider flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>AI Remediation Strategy</span>
+                    </div>
+                    <p className="text-xs text-slate-200">
+                      {fixPreviewData.explanation}
+                    </p>
+                  </div>
+
+                  <div>
+                    <div className="text-xs font-semibold text-slate-400 mb-1.5 flex items-center justify-between">
+                      <span>Proposed Unified Diff Patch</span>
+                      <span className="text-[11px] text-emerald-400 font-mono">AST Syntax Validated</span>
+                    </div>
+                    <pre className="bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-xs overflow-x-auto text-slate-200 leading-relaxed">
+                      {fixPreviewData.unified_diff.split('\n').map((l: string, idx: number) => (
+                        <div
+                          key={idx}
+                          className={
+                            l.startsWith('+') ? 'text-emerald-400 bg-emerald-950/20' :
+                            l.startsWith('-') ? 'text-rose-400 bg-rose-950/20' :
+                            l.startsWith('@') ? 'text-cyan-400 font-bold' : 'text-slate-400'
+                          }
+                        >
+                          {l}
+                        </div>
+                      ))}
+                    </pre>
+                  </div>
+
+                  {fixPrResult && (
+                    <div className="p-4 bg-emerald-950/40 border border-emerald-500/40 rounded-xl text-xs text-emerald-300 space-y-2">
+                      <div className="font-bold flex items-center gap-1.5">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <span>Pull Request Successfully Created on GitHub!</span>
+                      </div>
+                      <p>
+                        Branch: <code className="bg-emerald-900/40 px-1.5 py-0.5 rounded text-white">{fixPrResult.branch}</code>
+                      </p>
+                      <a
+                        href={fixPrResult.pr_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-cyan-400 hover:underline font-bold"
+                      >
+                        <span>View Pull Request #{fixPrResult.pr_number} on GitHub &rarr;</span>
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    </div>
+                  )}
+                </>
+              ) : null}
+            </div>
+
+            <div className="p-5 border-t border-slate-800 bg-slate-950/50 flex items-center justify-between gap-3">
+              <button
+                onClick={() => setFixModalOpen(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition"
+              >
+                Close
+              </button>
+
+              {fixPreviewData && !fixPrResult && (
+                <button
+                  onClick={handleCreateAiPr}
+                  disabled={fixPrLoading}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white font-bold rounded-xl text-xs transition shadow-lg shadow-purple-600/30 disabled:opacity-50 cursor-pointer"
+                >
+                  {fixPrLoading ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Opening GitHub PR...</span>
+                    </>
+                  ) : (
+                    <>
+                      <GitPullRequest className="w-3.5 h-3.5" />
+                      <span>Open GitHub Pull Request</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 2. PULL REQUEST SECURITY GATEKEEPER MODAL                                */}
+      {/* ========================================================================= */}
+      {prGateModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-slate-950/50">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center text-white shadow-md shadow-emerald-600/30">
+                  <GitPullRequest className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">
+                    GitHub PR Security Gatekeeper
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Automated inline review comments & merge protection
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setPrGateModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-4 text-xs text-slate-300">
+              <div className="p-4 bg-emerald-950/30 border border-emerald-500/30 rounded-xl space-y-2">
+                <div className="font-bold text-emerald-400 text-sm flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>How ZyloRun PR Gatekeeper Protects Your Code:</span>
+                </div>
+                <ul className="space-y-1.5 text-slate-300 list-disc list-inside">
+                  <li><strong>Automated PR Comments</strong>: Posts clean risk scores and remediations directly in the PR thread.</li>
+                  <li><strong>Inline Line Annotations</strong>: Highlights exact lines with confirmed vulnerabilities.</li>
+                  <li><strong>Merge Gatekeeper</strong>: Blocks PR merge if unaddressed Critical or High security findings exist.</li>
+                </ul>
+              </div>
+
+              <div>
+                <div className="font-bold text-slate-200 mb-1.5">GitHub Action Workflow (.github/workflows/zylorun-gate.yml):</div>
+                <pre className="bg-slate-950 border border-slate-800 rounded-xl p-3 font-mono text-[11px] overflow-x-auto text-slate-300 max-h-48 whitespace-pre">
+                  {WORKFLOW_SNIPPET}
+                </pre>
+              </div>
+            </div>
+
+            <div className="p-5 border-t border-slate-800 bg-slate-950/50 flex items-center justify-between">
+              <button
+                onClick={() => setPrGateModalOpen(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition"
+              >
+                Done
+              </button>
+              <button
+                onClick={handleCopyWorkflow}
+                className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition shadow-md shadow-emerald-600/20 cursor-pointer"
+              >
+                {workflowCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{workflowCopied ? 'Workflow Copied!' : 'Copy GitHub Action'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 3. SECRET GUARD & CREDENTIAL SCANNER MODAL                               */}
+      {/* ========================================================================= */}
+      {secretGuardOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-slate-950/50">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center text-slate-950 shadow-md shadow-amber-500/30">
+                  <KeyRound className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">
+                    Live Secret & Credential Guard
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    High-speed leak detection with Shannon entropy analysis & redaction
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSecretGuardOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-4 text-xs">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">
+                  Paste Code Snippet, .env, or Log Text to Audit:
+                </label>
+                <textarea
+                  value={secretInputText}
+                  onChange={(e) => setSecretInputText(e.target.value)}
+                  placeholder="Paste config, shell exports, database URIs, or tokens here to scan..."
+                  rows={6}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-mono text-slate-200 focus:outline-none focus:border-amber-500 transition"
+                />
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  onClick={handleRunLiveSecretScan}
+                  disabled={secretScanLoading || !secretInputText.trim()}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-bold rounded-xl text-xs transition shadow-md shadow-amber-500/20 disabled:opacity-50 cursor-pointer"
+                >
+                  {secretScanLoading ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Scanning for Credentials...</span>
+                    </>
+                  ) : (
+                    <>
+                      <KeyRound className="w-3.5 h-3.5" />
+                      <span>Scan for Leaks</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {secretScanResult && (
+                <div className="space-y-3 pt-2">
+                  <div className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-between ${
+                    secretScanResult.total_secrets === 0
+                      ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-300'
+                      : 'bg-rose-950/30 border-rose-500/30 text-rose-300'
+                  }`}>
+                    <span>{secretScanResult.total_secrets === 0 ? '✅ Clean: No Secrets or Leaks Detected' : `🚨 Detected ${secretScanResult.total_secrets} Exposed Secret(s)`}</span>
+                    <span className="font-mono text-[10px]">{secretScanResult.status}</span>
+                  </div>
+
+                  {secretScanResult.findings && secretScanResult.findings.map((s: any, sIdx: number) => (
+                    <div key={sIdx} className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-white">{s.title}</span>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-600 text-white">{s.severity}</span>
+                      </div>
+                      <div className="text-xs font-mono text-amber-400 bg-slate-900 px-2 py-1 rounded">
+                        Masked Token: {s.masked_secret} (Line {s.line_number})
+                      </div>
+                      <p className="text-[11px] text-slate-400">{s.remediation}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="p-5 border-t border-slate-800 bg-slate-950/50 flex items-center justify-end">
+              <button
+                onClick={() => setSecretGuardOpen(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

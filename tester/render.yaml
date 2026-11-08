@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: gitflow-api
+    name: zylorun
     env: python
     buildCommand: "pip install -r backend/requirements.txt"
     startCommand: "cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
@@ -8,22 +8,20 @@ services:
       - key: ENVIRONMENT
         value: production
       - key: FRONTEND_URL
-        value: https://gitflow-rose-eight.vercel.app
+        value: https://zylorun-five.vercel.app,https://zylorun.vercel.app
       - key: DATABASE_URL
-        fromDatabase:
-          name: gitflow-db
-          property: connectionString
+        value: postgresql+asyncpg://postgres.zrtplsfswxegtigdvery:Fm7P8s7umt4OqqWv@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres
       - key: GITHUB_WEBHOOK_SECRET
         sync: false
       - key: SECRET_KEY
         sync: false
       - key: GITHUB_TOKEN_ENCRYPTION_KEY
         sync: false
-      - key: GITFLOW_CRON_SECRET
+      - key: ZYLORUN_CRON_SECRET
         sync: false
 
   - type: cron
-    name: gitflow-polling-trigger
+    name: zylorun-polling-trigger
     runtime: python
     schedule: "* * * * *"
     buildCommand: "pip install -r backend/requirements.txt"
@@ -32,14 +30,10 @@ services:
       - key: GITFLOW_API_URL
         fromService:
           type: web
-          name: gitflow-api
+          name: zylorun
           envVarKey: RENDER_EXTERNAL_URL
       - key: GITFLOW_CRON_SECRET
         fromService:
           type: web
-          name: gitflow-api
-          envVarKey: GITFLOW_CRON_SECRET
-
-databases:
-  - name: gitflow-db
-    plan: free
+          name: zylorun
+          envVarKey: ZYLORUN_CRON_SECRET

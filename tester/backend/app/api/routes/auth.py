@@ -37,9 +37,26 @@ async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
     return db_user
 
 @router.post("/login")
-async def login(response: Response, form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
-    login_id = (form_data.username or "").strip()
-    clean_pass = form_data.password or ""
+async def login(request: Request, response: Response, db: AsyncSession = Depends(get_db)):
+    login_id = ""
+    clean_pass = ""
+    
+    content_type = request.headers.get("content-type", "").lower()
+    if "application/json" in content_type:
+        try:
+            body = await request.json()
+            login_id = str(body.get("username") or body.get("email") or "").strip()
+            clean_pass = str(body.get("password") or "").strip()
+        except Exception:
+            pass
+    
+    if not login_id or not clean_pass:
+        try:
+            form = await request.form()
+            login_id = str(form.get("username") or form.get("email") or "").strip()
+            clean_pass = str(form.get("password") or "").strip()
+        except Exception:
+            pass
     
     if not login_id or not clean_pass:
         raise HTTPException(

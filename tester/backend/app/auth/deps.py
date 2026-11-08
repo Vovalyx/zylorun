@@ -52,7 +52,16 @@ async def get_current_user(request: Request, db: AsyncSession = Depends(get_db))
     if cached and cached[1] > now:
         return cached[0]
 
-    result = await db.execute(select(User).where(User.username == username, User.is_active.is_(True)))
+    from sqlalchemy import or_, func
+    result = await db.execute(
+        select(User).where(
+            or_(
+                func.lower(User.username) == username.lower(),
+                func.lower(User.email) == username.lower()
+            ),
+            User.is_active.is_(True)
+        )
+    )
     user = result.scalars().first()
     if not user:
         raise HTTPException(status_code=401, detail="User not found")

@@ -124,13 +124,13 @@ async def background_visitor_flush():
 async def lifespan(app: FastAPI):
     try:
         try:
-            await asyncio.to_thread(run_migrations)
+            await asyncio.wait_for(asyncio.to_thread(run_migrations), timeout=12.0)
             logger.info("Successfully ran database migrations.")
         except Exception as mig_err:
             logger.warning("Database migrations skipped or encountered note: %s. Ensuring schema via Base.metadata...", mig_err)
         
         try:
-            await asyncio.to_thread(ensure_schema_and_columns)
+            await asyncio.wait_for(asyncio.to_thread(ensure_schema_and_columns), timeout=12.0)
         except Exception as schema_err:
             logger.warning("Schema preparation note: %s", schema_err)
 
@@ -199,7 +199,7 @@ async def lifespan(app: FastAPI):
                     logger.warning("Could not seed default configs/users: %s", exc)
                 finally:
                     db.close()
-            await asyncio.to_thread(_seed)
+            await asyncio.wait_for(asyncio.to_thread(_seed), timeout=8.0)
         except Exception as exc:
             logger.warning("Default seeding encountered exception: %s", exc)
 

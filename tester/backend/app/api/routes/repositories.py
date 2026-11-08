@@ -94,7 +94,16 @@ async def get_current_user(request: Request, db: AsyncSession = Depends(get_db))
         if not username or payload.get("type") != "access": raise JWTError("invalid access token")
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token", headers={"WWW-Authenticate": "Bearer"})
-    user = (await db.execute(select(User).where(User.username == username, User.is_active.is_(True)))).scalars().first()
+    from sqlalchemy import or_, func
+    user = (await db.execute(
+        select(User).where(
+            or_(
+                func.lower(User.username) == username.lower(),
+                func.lower(User.email) == username.lower()
+            ),
+            User.is_active.is_(True)
+        )
+    )).scalars().first()
     if not user: raise HTTPException(status_code=401, detail="User not found")
     return user
 

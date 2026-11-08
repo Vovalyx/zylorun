@@ -5,10 +5,17 @@ from app.config import settings
 
 SUPABASE_DEFAULT_URL = "postgresql+asyncpg://postgres.zrtplsfswxegtigdvery:Fm7P8s7umt4OqqWv@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres"
 raw_url = settings.DATABASE_URL or SUPABASE_DEFAULT_URL
-# Automatically promote to Supabase production database if raw_url is empty or defaulted to sqlite
+# Automatically promote to Supabase production database if raw_url is empty, sqlite, or points to dead Render DB
 import os
-if not raw_url or ("sqlite" in raw_url and os.getenv("USE_LOCAL_SQLITE", "").lower() != "true"):
-    raw_url = SUPABASE_DEFAULT_URL
+if (
+    not raw_url
+    or "sqlite" in raw_url
+    or "render.com" in raw_url
+    or "dpg-" in raw_url
+    or "gitflow-db" in raw_url
+):
+    if os.getenv("USE_LOCAL_SQLITE", "").lower() != "true":
+        raw_url = SUPABASE_DEFAULT_URL
 
 # Render & Heroku provide postgres:// URLs; modern SQLAlchemy requires postgresql://
 if raw_url.startswith("postgres://"):
@@ -36,6 +43,7 @@ if not is_sqlite:
         "pool_timeout": 30,
         "pool_recycle": 1800,
         "pool_pre_ping": True,
+        "connect_args": {"timeout": 15},
     })
     sync_kwargs.update({
         "pool_size": 5,
@@ -43,6 +51,7 @@ if not is_sqlite:
         "pool_timeout": 30,
         "pool_recycle": 1800,
         "pool_pre_ping": True,
+        "connect_args": {"connect_timeout": 15},
     })
 else:
     async_kwargs.update({

@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Zylorun"
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL", 
-        "postgresql+asyncpg://postgres.zrtplsfswxegtigdvery:Fm7P8s7umt4OqqWv@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres"
+        "sqlite+aiosqlite:///./risk_passport.db"
     )
     SECRET_KEY: str = os.getenv("SECRET_KEY", "your-super-secret-key")
     ALGORITHM: str = "HS256"

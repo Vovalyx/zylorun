@@ -3,19 +3,14 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy import create_engine
 from app.config import settings
 
-SUPABASE_DEFAULT_URL = "postgresql+asyncpg://postgres.zrtplsfswxegtigdvery:Fm7P8s7umt4OqqWv@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres"
-raw_url = settings.DATABASE_URL or SUPABASE_DEFAULT_URL
-# Automatically promote to Supabase production database if raw_url is empty, sqlite, or points to dead Render DB
+import re
 import os
-if (
-    not raw_url
-    or "sqlite" in raw_url
-    or "render.com" in raw_url
-    or "dpg-" in raw_url
-    or "gitflow-db" in raw_url
-):
-    if os.getenv("USE_LOCAL_SQLITE", "").lower() != "true":
-        raw_url = SUPABASE_DEFAULT_URL
+
+raw_url = settings.DATABASE_URL or "sqlite+aiosqlite:///./risk_passport.db"
+
+# Automatically strip accidental square brackets around password (e.g., :[PASSWORD]@)
+if raw_url:
+    raw_url = re.sub(r':\[([^\]]+)\]@', r':\1@', raw_url)
 
 # Render & Heroku provide postgres:// URLs; modern SQLAlchemy requires postgresql://
 if raw_url.startswith("postgres://"):

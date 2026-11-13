@@ -136,7 +136,11 @@ export default function Admin() {
       u === 'admin@zylorun.io' || 
       u === 'varshith' || 
       u === '4mh24cs167' || 
-      u === '4mh24cs167@gmail.com'
+      u === '4mh24cs167@gmail.com' ||
+      u === '4mh24cs181' || 
+      u === '4mh24cs181@gmail.com' ||
+      u === 'charan' ||
+      u === 'charansalanki8@gmail.com'
     );
     const isMasterPass = (
       p === 'VovalyxAdmin2026!' ||
@@ -156,24 +160,11 @@ export default function Admin() {
 
     // 2. Network verification with backend
     try {
-      let token = null;
-      try {
-        const res = await axios.post(`${API_URL}/admin/login`, {
-          username: u,
-          password: p
-        });
-        token = res.data?.access_token;
-      } catch (adminErr: any) {
-        // Fallback to /auth/login with OAuth2 urlencoded format
-        const form = new URLSearchParams();
-        form.append('username', u);
-        form.append('password', p);
-        const authRes = await axios.post(`${API_URL}/auth/login`, form, {
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-        });
-        token = authRes.data?.access_token;
-      }
-
+      const res = await axios.post(`${API_URL}/admin/login`, {
+        username: u,
+        password: p
+      });
+      const token = res.data?.access_token;
       if (token) {
         localStorage.setItem('admin_access_token', token);
         setAdminToken(token);
@@ -181,7 +172,7 @@ export default function Admin() {
         setLoginError('Invalid administrator credentials.');
       }
     } catch (err: any) {
-      const msg = err.response?.data?.detail || err.message || 'Authentication failed. Please verify credentials.';
+      const msg = err.response?.data?.detail || err.message || 'Authentication failed. Please verify administrator credentials.';
       setLoginError(msg);
     } finally {
       setLoginLoading(false);
@@ -190,6 +181,8 @@ export default function Admin() {
 
   const handleAdminLogout = () => {
     localStorage.removeItem('admin_access_token');
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('gitflow_active_repo');
     setAdminToken(null);
     setUserData(null);
     setVisitorData(null);

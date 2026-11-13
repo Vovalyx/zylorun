@@ -117,6 +117,9 @@ export default function Layout() {
           <button 
             onClick={() => {
               localStorage.removeItem('access_token');
+              localStorage.removeItem('admin_access_token');
+              localStorage.removeItem('gitflow_active_repo');
+              localStorage.removeItem('user');
               window.location.href = '/';
             }}
             className="flex items-center w-full px-4 py-2.5 text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-lg transition-colors">

@@ -127,6 +127,9 @@ export default function ProjectHub() {
           if (!selectedRepoId || !res.data.some((r: any) => r.id === selectedRepoId)) {
             setSelectedRepoId(res.data[0].id);
           }
+        } else {
+          setSelectedRepoId(null);
+          setOverviewData(null);
         }
       } catch (err: any) {
         setError(err.response?.data?.detail || 'Failed to load repositories');

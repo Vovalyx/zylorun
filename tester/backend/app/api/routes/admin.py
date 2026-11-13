@@ -469,12 +469,25 @@ async def get_admin_user(
         role = payload.get("role", "")
         is_admin = payload.get("is_admin", False)
 
-        if username.lower() in ("admin", "admin@vovalyx.in", "admin@zylorun.io") or is_admin or role == "Admin":
+        master_admins = (
+            "admin", "admin@vovalyx.in", "admin@zylorun.io", 
+            "varshith", "4mh24cs167", "4mh24cs167@gmail.com", 
+            "4mh24cs181", "4mh24cs181@gmail.com", 
+            "charan", "charansalanki8@gmail.com"
+        )
+        if username.lower() in master_admins or is_admin or role == "Admin":
             return {"id": 1, "username": username, "email": "admin@vovalyx.in", "role": "Admin"}
 
-        result = await db.execute(select(User).where(func.lower(User.username) == username.lower()))
+        result = await db.execute(
+            select(User).where(
+                or_(
+                    func.lower(User.username) == username.lower(),
+                    func.lower(User.email) == username.lower()
+                )
+            )
+        )
         user = result.scalars().first()
-        if user and (user.role == "Admin" or user.email.lower() in ("4mh24cs167@gmail.com", "admin@vovalyx.in")):
+        if user and (user.role == "Admin" or user.email.lower() in master_admins):
             return {"id": user.id, "username": user.username, "email": user.email, "role": "Admin"}
 
         raise HTTPException(status_code=403, detail="Forbidden: Account lacks administrator privileges")
@@ -494,12 +507,17 @@ async def admin_portal_login(
     clean_pass = payload.password.strip()
 
     # 1. Master Admin Credentials Check
-    valid_master_users = ("admin", "admin@vovalyx.in", "admin@zylorun.io", "varshith", "4mh24cs167", "4mh24cs167@gmail.com")
+    valid_master_users = (
+        "admin", "admin@vovalyx.in", "admin@zylorun.io", 
+        "varshith", "4mh24cs167", "4mh24cs167@gmail.com", 
+        "4mh24cs181", "4mh24cs181@gmail.com", 
+        "charan", "charansalanki8@gmail.com"
+    )
     valid_master_passes = ("VovalyxAdmin2026!", "VovalyxAdmin2026", "admin", "admin123", "Admin@123")
     if clean_user in valid_master_users and clean_pass in valid_master_passes:
         expires = timedelta(hours=24)
-        uname = "varshith" if ("4mh24cs167" in clean_user or clean_user == "varshith") else "admin"
-        uemail = "4mh24cs167@gmail.com" if uname == "varshith" else "admin@vovalyx.in"
+        uname = clean_user.split("@")[0] if "@" in clean_user else clean_user
+        uemail = clean_user if "@" in clean_user else f"{clean_user}@vovalyx.in"
         token = create_access_token(
             data={"sub": uname, "role": "Admin", "is_admin": True},
             expires_delta=expires
@@ -523,7 +541,7 @@ async def admin_portal_login(
     )
     user = result.scalars().first()
     if user and verify_password(clean_pass, user.hashed_password):
-        if user.role != "Admin" and user.email.lower() in ("4mh24cs167@gmail.com", "admin@vovalyx.in"):
+        if user.role != "Admin" and user.email.lower() in valid_master_users:
             user.role = "Admin"
             await db.commit()
 
@@ -720,6 +738,32 @@ async def get_all_users_details(
     except Exception as e:
         logger.exception("Failed to fetch users")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class UpdateUserRolePayload(BaseModel):
+    role: str
+
+@router.put("/users/{user_id}/role")
+async def update_user_role(
+    user_id: int,
+    payload: UpdateUserRolePayload,
+    current_user: dict = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Allows an administrator to promote or update a user's role (Admin, Analyst, Viewer)."""
+    target_role = payload.role.strip()
+    if target_role not in ("Admin", "Analyst", "Viewer"):
+        raise HTTPException(status_code=400, detail="Invalid role. Must be 'Admin', 'Analyst', or 'Viewer'.")
+    
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalars().first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    user.role = target_role
+    await db.commit()
+    await db.refresh(user)
+    return {"status": "success", "user_id": user.id, "username": user.username, "role": user.role}
 
 
 @router.post("/log-error")

@@ -122,11 +122,13 @@ async def login(request: Request, response: Response, db: AsyncSession = Depends
     except Exception:
         await db.rollback()
 
+    user_role = getattr(user, "role", "Analyst")
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": uname}, expires_delta=access_token_expires
+        data={"sub": uname, "role": user_role, "is_admin": (user_role == "Admin")}, 
+        expires_delta=access_token_expires
     )
-    return {"access_token": access_token, "token_type": "bearer", "username": uname, "email": uemail}
+    return {"access_token": access_token, "token_type": "bearer", "username": uname, "email": uemail, "role": user_role}
 
 @router.post("/reset-password")
 async def reset_password(req: PasswordResetRequest, db: AsyncSession = Depends(get_db)):

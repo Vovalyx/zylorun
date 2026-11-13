@@ -62,6 +62,10 @@ export default function Dashboard() {
       setRepos(reposRes.data);
       
       if (reposRes.data.length === 0) {
+        activeRepoIdRef.current = null;
+        setActiveRepoId(null);
+        setHistory([]);
+        localStorage.removeItem('gitflow_active_repo');
         if (!silent) setLoading(false);
         return;
       }

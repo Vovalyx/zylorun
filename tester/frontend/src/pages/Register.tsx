@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 import { apiClient } from '../config';
 
 export default function Register() {
@@ -34,7 +35,31 @@ export default function Register() {
     <div className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden bg-background-light dark:bg-background-dark">
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-brand-500/10 blur-[100px] rounded-full pointer-events-none" />
       
+      {/* Top Left Floating Back to Home Button */}
+      <Link
+        to="/"
+        className="absolute top-6 left-6 z-20 flex items-center gap-2 px-3.5 py-2 rounded-xl bg-surface-light/80 dark:bg-slate-900/80 backdrop-blur-md border border-border-light dark:border-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-brand-500 dark:hover:text-white hover:border-brand-500/40 transition-all shadow-sm group"
+        title="Return to Zylorun homepage"
+      >
+        <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1 text-brand-500" />
+        <span>Back to Home</span>
+      </Link>
+
       <div className="w-full max-w-md p-8 rounded-2xl bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark shadow-xl shadow-black/5 dark:shadow-black/20 z-10">
+        {/* In-Card Back Link Header */}
+        <div className="mb-4 flex items-center justify-between">
+          <Link
+            to="/"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors group"
+          >
+            <ArrowLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-1 text-brand-500" />
+            <span>Back to Home</span>
+          </Link>
+          <span className="text-[11px] font-mono text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+            Zylorun Registration
+          </span>
+        </div>
+
         <div className="flex flex-col items-center mb-8 text-center">
           <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4 bg-slate-900 border border-slate-700/60 shadow-xl shadow-cyan-950/20">
             <img src="/zylorun-logo.svg" alt="Zylorun Logo" className="w-full h-full object-contain p-2" />

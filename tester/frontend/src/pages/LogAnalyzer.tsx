@@ -87,25 +87,107 @@ export function analyzeLocally(logText: string): AnalysisResult {
       continue;
     }
 
+    const fileLower = currentFile.toLowerCase();
+    // Exclude documentation, lockfiles, and non-source files from static code analysis
+    if (
+      fileLower.endsWith('.md') ||
+      fileLower.endsWith('.markdown') ||
+      fileLower.endsWith('.txt') ||
+      fileLower.endsWith('.lock') ||
+      fileLower.endsWith('.json') ||
+      fileLower.includes('docs/') ||
+      fileLower.includes('package-lock.json')
+    ) {
+      continue;
+    }
+
     const lineLower = lineClean.toLowerCase();
 
-    // Specific security flaw checks
-    const isSqli = (lineLower.includes('select ') && lineLower.includes(' from ') && lineLower.includes('+')) ||
-                   (lineLower.includes('cursor.execute(') && (lineLower.includes('+') || lineLower.includes('%')));
-    const isSecret = ['aws_secret', 'private_key', 'secret_key', 'bearer ', 'api_key ='].some(k => lineLower.includes(k)) ||
-                     (lineLower.includes('password') && lineLower.includes('=') && !lineLower.includes('input') && !lineLower.includes('type='));
-    const isRce = ['eval(', 'exec(', 'os.system(', 'subprocess.call(', 'subprocess.popen('].some(k => lineLower.includes(k)) &&
-                  (lineLower.includes('shell=true') || lineLower.includes('eval') || lineLower.includes('exec'));
-    const isXss = lineLower.includes('innerhtml') || lineLower.includes('dangerouslysetinnerhtml') || lineLower.includes('document.write(');
+    // Skip code comments unless they contain an explicit live token signature
+    if (
+      lineClean.startsWith('//') ||
+      lineClean.startsWith('#') ||
+      lineClean.startsWith('*') ||
+      lineClean.startsWith('/*') ||
+      lineClean.startsWith('<!--')
+    ) {
+      const hasToken = /AKIA[0-9A-Z]{16}|ghp_[0-9a-zA-Z]{36}|AIzaSy[0-9a-zA-Z_-]{33}|bearer\s+eyJ/i.test(lineClean);
+      if (!hasToken) continue;
+    }
 
-    const isCritical = isSqli || isSecret || isRce || isXss || [
-      'critical', 'fatal', 'token leak', 'xss', 'rce', 'sql injection', 'cve-'
-    ].some(k => lineLower.includes(k));
+    // Skip CSS classes, Tailwind color declarations, and UI attributes
+    if (
+      lineLower.includes('classname=') ||
+      lineLower.includes('class=') ||
+      lineLower.includes('text-critical-red') ||
+      lineLower.includes('border-critical-red') ||
+      lineLower.includes('bg-critical-red') ||
+      lineLower.includes('style=')
+    ) {
+      continue;
+    }
 
-    const isWarning = ['warning', 'warn', 'deprecated', 'disclosure', 'sast', 'sca', 'insecure', 'debug = true', 'allow_origins=["*"]'].some(k => lineLower.includes(k));
+    // Skip standard React form hooks, states, and attributes
+    if (
+      lineLower.includes('usestate(') ||
+      lineLower.includes('setpassword') ||
+      lineLower.includes('showpassword') ||
+      lineLower.includes('type="password"') ||
+      lineLower.includes("type='password'") ||
+      lineLower.includes('placeholder=')
+    ) {
+      continue;
+    }
+
+    // 1. Real SQL Injection (concatenation / formatting of variables into SQL queries)
+    const isSqli = (
+      (lineLower.includes('select ') && lineLower.includes(' from ') && (lineClean.includes('+') || lineClean.includes('${') || lineClean.includes('%s'))) ||
+      (lineLower.includes('cursor.execute(') && (lineClean.includes('+') || lineClean.includes('%') || lineClean.includes('f"') || lineClean.includes("f'")))
+    );
+
+    // 2. Real Hardcoded Secret Tokens (actual high-entropy credentials, not field names)
+    const hasSecretPattern = /AKIA[0-9A-Z]{16}|ghp_[0-9a-zA-Z]{36}|AIzaSy[0-9a-zA-Z_-]{33}|bearer\s+eyJ[a-zA-Z0-9_-]{10,}|-----BEGIN\s+[A-Z\s]+PRIVATE\s+KEY-----/i.test(lineClean);
+    const isSecretAssignment = (
+      (lineLower.includes('aws_secret') || lineLower.includes('private_key') || lineLower.includes('secret_key')) &&
+      lineClean.includes('=') &&
+      /['"][a-zA-Z0-9_\-+=/]{16,}['"]/.test(lineClean) &&
+      !lineLower.includes('your-') &&
+      !lineLower.includes('placeholder') &&
+      !lineLower.includes('example') &&
+      !lineLower.includes('test')
+    );
+    const isSecret = hasSecretPattern || isSecretAssignment;
+
+    // 3. Real Remote Code Execution (dynamic eval/exec of user inputs or shell=True)
+    const isRce = (
+      (lineLower.includes('eval(') || lineLower.includes('exec(')) && (lineLower.includes('req.') || lineLower.includes('params') || lineLower.includes('body') || lineLower.includes('input'))
+    ) || (
+      (lineLower.includes('subprocess.popen(') || lineLower.includes('subprocess.call(') || lineLower.includes('subprocess.run(')) && lineLower.includes('shell=true')
+    );
+
+    // 4. Real Cross-Site Scripting (injection of user input directly into unescaped DOM)
+    const isXss = (
+      lineLower.includes('dangerouslysetinnerhtml') && (lineLower.includes('req.') || lineLower.includes('params') || lineLower.includes('body') || lineLower.includes('input') || lineLower.includes('html'))
+    ) || (
+      lineLower.includes('document.write(') && (lineLower.includes('req.') || lineLower.includes('input') || lineLower.includes('location.'))
+    );
+
+    // 5. Build/Server log attacks (e.g. from WAF or firewall audit logs)
+    const isLogAttack = (
+      lineClean.startsWith('[CRITICAL]') || lineClean.startsWith('[SECURITY]') || lineClean.startsWith('[WAF]')
+    ) && (lineLower.includes('injection') || lineLower.includes('brute-force') || lineLower.includes('leak') || lineLower.includes('unauthorized'));
+
+    const isCritical = isSqli || isSecret || isRce || isXss || isLogAttack;
+
+    // Real Warning: Insecure configuration
+    const isWarning = (
+      lineLower.includes('allow_origins=["*"]') ||
+      lineLower.includes("allow_origins=['*']") ||
+      (lineLower.includes('debug = true') && !lineLower.includes('test'))
+    );
 
     if (isCritical) {
-      const flawType = isSqli ? 'SQL Injection' : isSecret ? 'Hardcoded Secret' : isRce ? 'Remote Code Execution (RCE)' : isXss ? 'Cross-Site Scripting (XSS)' : 'Critical Finding';
+      const flawType = isSqli ? 'SQL Injection' : isSecret ? 'Hardcoded Secret' : isRce ? 'Remote Code Execution (RCE)' : isXss ? 'Cross-Site Scripting (XSS)' : 'Security Violation';
       
       let rec = `Critical ${flawType} detected. Immediate remediation required.`;
       if (isSqli) rec = `SQL Injection hazard: Concatenating untrusted parameters directly into raw queries. Use parameterized statements or an ORM.`;
@@ -124,7 +206,7 @@ export function analyzeLocally(logText: string): AnalysisResult {
       findings.push({
         severity: 'Warning',
         message: `${currentFile} -> ${lineClean}`,
-        recommendation: 'Security advisory or best practice rule violation.',
+        recommendation: 'Insecure configuration detected: Avoid wildcards in CORS origins and disable debug mode in production.',
         matched_line: lineClean
       });
       if (statusResult === 'Pass') statusResult = 'Warning';
@@ -179,12 +261,15 @@ export default function LogAnalyzer() {
                   name.includes('.git/') ||
                   name.includes('.next/') ||
                   name.includes('dist/') ||
-                  name.includes('build/')
+                  name.includes('build/') ||
+                  name.includes('docs/') ||
+                  name.includes('.github/') ||
+                  name.includes('package-lock.json')
                 ) {
                   return false;
                 }
                 if (
-                  name.match(/\.(png|jpg|jpeg|gif|ico|svg|pdf|exe|dll|zip|tar|gz|7z|rar|mp4|webm|mp3|wav|woff|woff2|ttf|eot|otf|bin|iso|dmg|apk|jar|class|pyc|so|dylib|map|lock)$/i)
+                  name.match(/\.(png|jpg|jpeg|gif|ico|svg|pdf|exe|dll|zip|tar|gz|7z|rar|mp4|webm|mp3|wav|woff|woff2|ttf|eot|otf|bin|iso|dmg|apk|jar|class|pyc|so|dylib|map|lock|md|markdown|txt|json)$/i)
                 ) {
                   return false;
                 }

@@ -375,7 +375,19 @@ app.include_router(fixes.router)
 @app.get("/api/v1/health")
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "service": "Zylorun", "version": "2.1.0"}
+    from app.config import database_kind
+    kind = database_kind(settings)
+    body = {
+        "status": "healthy",
+        "service": "Zylorun",
+        "version": "2.1.0",
+        "environment": "production" if is_production(settings) else "development",
+        "database": kind,
+    }
+    if kind == "sqlite":
+        # Shown on purpose: a hosted deployment on SQLite loses all accounts on every deploy.
+        body["warning"] = "DATABASE_URL is not set; data is stored in a temporary local file."
+    return body
 
 @app.get("/")
 async def root():

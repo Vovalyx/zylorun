@@ -84,6 +84,16 @@ def _save_dev_secrets(data: dict) -> None:
         pass
 
 
+def database_kind(config) -> str:
+    """'postgresql' or 'sqlite' - the engine only, never the address or credentials."""
+    url = str(getattr(config, "DATABASE_URL", "") or "").strip().lower()
+    if url.startswith("postgres"):
+        return "postgresql"
+    if url.startswith("sqlite") or not url:
+        return "sqlite"
+    return url.split(":", 1)[0].split("+", 1)[0]
+
+
 def validate_security_settings(config) -> None:
     """Refuse to start in production with missing or placeholder secrets.
 
@@ -114,7 +124,19 @@ def validate_security_settings(config) -> None:
                 "Refusing to start in production: set FRONTEND_URL to use HTTPS origins "
                 "(comma separated, no wildcard)."
             )
+        database_url = getattr(config, "DATABASE_URL", None)
+        if database_url is not None and str(database_url).strip().lower().startswith("sqlite"):
+            raise RuntimeError(
+                "Refusing to start in production: DATABASE_URL is not set, so the server would use a "
+                "local SQLite file that is erased on every deploy. Set DATABASE_URL to the PostgreSQL database."
+            )
         return
+
+    if database_kind(config) == "sqlite" and hasattr(config, "DATABASE_URL"):
+        logger.warning(
+            "DATABASE_URL is not set: using a local SQLite file. On hosts with temporary disks "
+            "(Render, containers) every account and scan is erased on each deploy or restart."
+        )
 
     if not missing:
         return

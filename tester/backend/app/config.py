@@ -11,9 +11,10 @@ INSECURE_ENCRYPTION_KEYS = {"", "uE2N2wF5bCq-H6sVlqQhM5mZl3fA7xP4V2bJ0rA1h10="}
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Zylorun"
-    DATABASE_URL: str = os.getenv(
-        "DATABASE_URL",
-        "sqlite+aiosqlite:///./risk_passport.db"
+    DATABASE_URL: str = (
+        os.getenv("DATABASE_URL")
+        or os.getenv("DATABAE_URL")
+        or "sqlite+aiosqlite:///./risk_passport.db"
     )
     SECRET_KEY: str = os.getenv("SECRET_KEY", "")
     ALGORITHM: str = "HS256"

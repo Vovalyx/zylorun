@@ -28,6 +28,9 @@ router = APIRouter(prefix="/runs", tags=["runs"])
 class ManualLogRequest(BaseModel):
     log_text: Optional[str] = None
     log_text_b64: Optional[str] = None
+    # Name of the uploaded file (e.g. "app.log", "views.py"). Decides whether the text is
+    # read as a log, source code or configuration. Archives carry "--- File: name ---" headers.
+    file_name: Optional[str] = None
 
 MAX_MANUAL_LOG_BYTES = 2 * 1024 * 1024  # 2 MB of text is far beyond any real log paste
 
@@ -38,136 +41,19 @@ async def analyze_manual_log(req: ManualLogRequest, current_user: User = Depends
     raw_text = req.log_text or ""
     if req.log_text_b64:
         try:
-            raw_text = base64.b64decode(req.log_text_b64).decode("utf-8", errors="ignore")
+            raw_text = base64.b64decode(req.log_text_b64).decode("utf-8", errors="replace")
         except Exception:
-            pass
+            raise HTTPException(status_code=400, detail="log_text_b64 is not valid base64.")
     if len(raw_text) > MAX_MANUAL_LOG_BYTES:
         raise HTTPException(status_code=413, detail="Log is too large to analyze (limit 2 MB).")
-    lines = raw_text.replace("\r", "").split("\n")
-    findings = []
-    status_result = "Pass"
-    current_file = "General"
+    if not raw_text.strip():
+        raise HTTPException(status_code=400, detail="Nothing to analyze: the text is empty.")
 
-    for line in lines:
-        line_clean = line.strip()
-        if not line_clean:
-            continue
+    from app.services.log_analyzer import analyze_text
 
-        line_lower = line_clean.lower()
-
-        # Detect file boundaries in concatenated archive logs
-        if line_clean.startswith("--- File:") or line_clean.startswith("File:") or line_clean.endswith(".js") or line_clean.endswith(".ts") or line_clean.endswith(".py"):
-            current_file = line_clean.replace("--- File: ", "").replace(" ---", "").strip()
-            continue
-
-        file_lower = current_file.lower()
-        # Exclude documentation, lockfiles, and markdown files from static code analysis
-        if any(file_lower.endswith(ext) for ext in [".md", ".markdown", ".txt", ".lock", ".json"]) or "docs/" in file_lower or "package-lock.json" in file_lower:
-            continue
-
-        # Skip comments unless they contain an explicit live token signature
-        if line_clean.startswith(("//", "#", "*", "/*", "<!--")):
-            has_token = any(sig in line_clean for sig in ["AKIA", "ghp_", "AIzaSy", "bearer eyJ"])
-            if not has_token:
-                continue
-
-        # Skip CSS classes, Tailwind color declarations, and UI attributes
-        if any(k in line_lower for k in ["classname=", "class=", "text-critical-red", "border-critical-red", "bg-critical-red", "style="]):
-            continue
-
-        # Skip standard React state hooks & form inputs
-        if any(k in line_lower for k in ["usestate(", "setpassword", "showpassword", 'type="password"', "type='password'", "placeholder="]):
-            continue
-
-        # 1. Real SQL Injection (concatenation / formatting of variables into SQL queries)
-        is_sqli = (
-            ("select " in line_lower and " from " in line_lower and ("+" in line_clean or "${" in line_clean or "%s" in line_clean))
-            or ("cursor.execute(" in line_lower and ("+" in line_clean or "%" in line_clean or 'f"' in line_clean or "f'" in line_clean))
-        )
-
-        # 2. Real Hardcoded Secret Tokens (actual credentials or token assignments)
-        import re
-        has_secret_pattern = bool(re.search(r"(AKIA[0-9A-Z]{16}|ghp_[0-9a-zA-Z]{10,}|AIzaSy[0-9a-zA-Z_-]{33}|bearer\s+eyJ[a-zA-Z0-9_-]{10,}|-----BEGIN\s+[A-Z\s]+PRIVATE\s+KEY-----)", line_clean, re.IGNORECASE))
-        is_secret_assignment = (
-            any(k in line_lower for k in ["aws_secret", "private_key", "secret_key", "user_token", "api_token", "auth_token"])
-            and "=" in line_clean
-            and bool(re.search(r"['\"][a-zA-Z0-9_\-+=/]{10,}['\"]", line_clean))
-            and not any(ph in line_lower for ph in ["your-", "placeholder", "example"])
-        )
-        is_secret = has_secret_pattern or is_secret_assignment
-
-        # 3. Compiler or syntax errors in build logs
-        is_syntax_err = any(k in line_lower for k in ["identifier directly after number", "unexpected token", "syntaxerror", "compilation error"])
-
-        # 3. Real Remote Code Execution (dynamic eval/exec of user inputs or shell=True)
-        is_rce = (
-            any(k in line_lower for k in ["eval(", "exec("]) and any(p in line_lower for p in ["req.", "params", "body", "input"])
-        ) or (
-            any(k in line_lower for k in ["subprocess.popen(", "subprocess.call(", "subprocess.run("]) and "shell=true" in line_lower
-        )
-
-        # 4. Real Cross-Site Scripting (injection of user input directly into unescaped DOM)
-        is_xss = (
-            "dangerouslysetinnerhtml" in line_lower and any(p in line_lower for p in ["req.", "params", "body", "input", "html"])
-        ) or (
-            "document.write(" in line_lower and any(p in line_lower for p in ["req.", "input", "location."])
-        )
-
-        # 5. Build/Server log attacks (e.g. from WAF or firewall audit logs)
-        is_log_attack = (
-            line_clean.startswith("[CRITICAL]") or line_clean.startswith("[SECURITY]") or line_clean.startswith("[WAF]")
-        ) and any(k in line_lower for k in ["injection", "brute-force", "leak", "unauthorized"])
-
-        is_critical = is_sqli or is_secret or is_rce or is_xss or is_log_attack
-
-        # Real Warning: Insecure configuration or syntax error
-        is_warning = is_syntax_err or (
-            'allow_origins=["*"]' in line_lower
-            or "allow_origins=['*']" in line_lower
-            or ("debug = true" in line_lower and "test" not in line_lower)
-        )
-
-        if is_critical:
-            flaw_type = "SQL Injection" if is_sqli else "Hardcoded Secret" if is_secret else "Remote Code Execution (RCE)" if is_rce else "Cross-Site Scripting (XSS)" if is_xss else "Security Violation"
-            findings.append({
-                "severity": "Critical",
-                "message": f"{current_file} -> [{flaw_type}] {line_clean}",
-                "recommendation": f"Critical {flaw_type} detected. Sanitize input or remove exposed secret immediately."
-            })
-            status_result = "Fail"
-        elif is_warning:
-            findings.append({
-                "severity": "Warning",
-                "message": f"{current_file} -> {line_clean}",
-                "recommendation": "Insecure configuration detected: Avoid wildcards in CORS origins and disable debug mode in production."
-            })
-            if status_result == "Pass":
-                status_result = "Warning"
-
-    # Contextual remediation enrichment
-    for finding in findings:
-        msg = finding["message"].lower()
-        file_part = finding["message"].split(" -> ")[0] if " -> " in finding["message"] else current_file
-        file_name = file_part.split("/")[-1].split("\\")[-1]
-
-        if "identifier directly after number" in msg:
-            finding["recommendation"] = f"Syntax error in '{file_name}': A number literal is placed directly adjacent to an identifier. Separate tokens with a space or quotation marks."
-        elif "unexpected token <" in msg:
-            finding["recommendation"] = f"JSX parse error in '{file_name}': Parser encountered HTML tags without JSX transformation enabled. Configure a React/JSX transpiler."
-        elif "empty block statement" in msg:
-            finding["recommendation"] = f"Empty code block in '{file_name}': Remove redundant empty braces {{}} or add a comment explaining why it is intentionally vacant."
-        elif "never used" in msg:
-            finding["recommendation"] = f"Unused variable in '{file_name}': Remove the unreferenced variable to reduce bundle weight and prevent logical oversights."
-        elif "non literal argument" in msg or "path traversal" in msg:
-            finding["recommendation"] = f"Path Traversal risk in '{file_name}': Dynamic user input is passed directly to filesystem access. Validate paths against a safe root directory."
-        elif "object injection" in msg or "prototype" in msg:
-            finding["recommendation"] = f"Prototype Pollution hazard in '{file_name}': Untrusted keys are accessed on dynamic objects. Freeze critical prototypes or use Map structures."
-        elif "secret" in msg or "password" in msg or "token" in msg:
-            finding["recommendation"] = f"Hardcoded credential in '{file_name}': Exposed credentials in source code. Immediately revoke and migrate secret to an environment variable."
-        elif "xss" in msg or "dangerouslysetinnerhtml" in msg or "eval(" in msg:
-            finding["recommendation"] = f"XSS / Code execution vulnerability in '{file_name}': Dangerously evaluating unescaped strings. Use safe encoding or sanitization libraries."
-
-    return {"status": status_result, "findings": findings}
+    file_name = (req.file_name or "").strip()[:255] or None
+    # The analysis is CPU-bound; keep it off the event loop so other requests are not blocked.
+    return await asyncio.to_thread(analyze_text, raw_text, file_name)
 
 # ----------------- AI Fix Generation -----------------
 

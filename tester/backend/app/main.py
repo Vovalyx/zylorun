@@ -450,7 +450,7 @@ async def health_check():
     }
     if kind == "sqlite":
         # Shown on purpose: a hosted deployment on SQLite loses all accounts on every deploy.
-        body["warning"] = "DATABASE_URL is not set; data is stored in a temporary local file."
+        body["warning"] = "Data is stored in a local SQLite file (DATABASE_URL is unset or points to SQLite); it is lost when the host's disk is reset."
     return body
 
 @app.get("/")

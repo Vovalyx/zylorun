@@ -135,8 +135,9 @@ def validate_security_settings(config) -> None:
 
     if database_kind(config) == "sqlite" and hasattr(config, "DATABASE_URL"):
         logger.warning(
-            "DATABASE_URL is not set: using a local SQLite file. On hosts with temporary disks "
-            "(Render, containers) every account and scan is erased on each deploy or restart."
+            "Using a local SQLite database (DATABASE_URL is unset or points to SQLite). This is fine for "
+            "development, but on hosts with temporary disks (Render, containers) every account and scan "
+            "is erased on each deploy or restart."
         )
 
     if not missing:

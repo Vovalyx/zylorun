@@ -83,20 +83,51 @@ def test_host_validator():
 
 @pytest.mark.asyncio
 async def test_manual_log_analyzer_endpoint():
+    """Runs through the real API: a code file with a hard-coded credential and a log
+    with a real crash are both reported, with the secret value masked."""
     await setup_test_context()
-    log_text = """
-    --- File: src/components/Dashboard.tsx ---
-    const user_token = "ghp_1234567890abcdef"; // secret leak
-    Line 42: Identifier directly after number 100px
-    Line 99: Unexpected token <
-    """
+    import base64
+    secret_value = "Q9x" + "pL7vZ2mT4kR8"
+    code_file = "\n".join([
+        "import os",
+        f'SMTP_PASSWORD = "{secret_value}"',
+        "def q(cursor, uid):",
+        '    cursor.execute("SELECT * FROM users WHERE id = %s", (uid,))',
+    ])
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        res = await client.post("/runs/analyze-manual", json={"log_text": log_text})
+        res = await client.post("/runs/analyze-manual", json={
+            "log_text_b64": base64.b64encode(code_file.encode()).decode(),
+            "file_name": "settings.py",
+        })
         assert res.status_code == 200
         data = res.json()
-        assert data["status"] in ("Warning", "Fail")
-        assert len(data["findings"]) >= 2
-        assert any("secret" in f["message"].lower() or "token" in f["message"].lower() for f in data["findings"])
+        assert data["status"] == "Fail"
+        assert [(f["rule_id"], f["line"]) for f in data["findings"]] == [("SEC-SECRET-ASSIGN", 2)]
+        assert secret_value not in res.text  # never echoed back in clear text
+        assert data["summary"]["files_analyzed"] == 1
+
+        crash = "\n".join([
+            "Traceback (most recent call last):",
+            '  File "/srv/app/main.py", line 3, in <module>',
+            "    run()",
+            "KeyError: 'DATABASE_URL'",
+        ])
+        res = await client.post("/runs/analyze-manual", json={"log_text": crash, "file_name": "render.log"})
+        finding = res.json()["findings"][0]
+        assert (finding["rule_id"], finding["line"]) == ("LOG-PY-EXCEPTION", 4)
+        assert "main.py:3" in finding["message"]
+
+        assert (await client.post("/runs/analyze-manual", json={"log_text": "   "})).status_code == 400
+        assert (await client.post("/runs/analyze-manual", json={"log_text_b64": "%%%not-base64"})).status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_manual_log_analyzer_requires_login():
+    """Without the test override the real authentication dependency applies."""
+    app.dependency_overrides.clear()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        res = await client.post("/runs/analyze-manual", json={"log_text": "ERROR boom"})
+        assert res.status_code == 401
 
 @pytest.mark.asyncio
 async def test_url_speed_test_ssrf_protection():

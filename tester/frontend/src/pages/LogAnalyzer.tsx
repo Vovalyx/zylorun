@@ -12,21 +12,48 @@ import {
   Download, 
   RefreshCw, 
   Search,
-  X
+  X,
+  Info
 } from 'lucide-react';
-import { apiClient } from '../config';
+import { apiClient, describeRequestError } from '../config';
 
 interface Finding {
   severity: 'Critical' | 'Warning' | 'Info';
   message: string;
   recommendation?: string;
   matched_line?: string;
+  rule_id?: string;
+  category?: string;
+  title?: string;
+  detail?: string;
+  file?: string;
+  line?: number;
+  count?: number;
+  context?: string[];
+}
+
+interface AnalysisSummary {
+  files_analyzed: number;
+  files_skipped: number;
+  lines_analyzed: number;
+  inputs: { file: string; type: string; lines: number }[];
+  counts: { Critical: number; Warning: number; Info: number };
+  truncated: boolean;
 }
 
 interface AnalysisResult {
   status: string;
   findings: Finding[];
+  summary?: AnalysisSummary;
 }
+
+// Archives are sent to the server as one text with a header per file.
+// Lock files, build output, binaries and documentation are left out; config files
+// (.env, .json, .yml) stay in because leaked credentials are often found there.
+const ARCHIVE_SKIP_DIRS = ['node_modules/', '.git/', '.next/', 'dist/', 'build/', '.venv/', 'venv/', '__pycache__/', 'coverage/'];
+const ARCHIVE_SKIP_FILES = /(^|\/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|poetry\.lock|composer\.lock|cargo\.lock|go\.sum)$/i;
+const ARCHIVE_SKIP_EXT = /\.(png|jpe?g|gif|ico|svg|webp|bmp|pdf|exe|dll|zip|tar|gz|7z|rar|mp4|webm|mp3|wav|woff2?|ttf|eot|otf|bin|iso|dmg|apk|jar|class|pyc|so|dylib|map|md|markdown|min\.js|min\.css|docx?|xlsx?|pptx?)$/i;
+const MAX_ARCHIVE_TEXT = 1_500_000;
 
 const SAMPLES: Record<string, { name: string; text: string }> = {
   vulnerableCode: {
@@ -71,158 +98,6 @@ app.post('/api/user/query', async (req, res) => {
   }
 };
 
-export function analyzeLocally(logText: string): AnalysisResult {
-  const lines = logText.replace(/\r/g, '').split('\n');
-  const findings: Finding[] = [];
-  let statusResult = 'Pass';
-  let currentFile = 'General';
-
-  for (const line of lines) {
-    const lineClean = line.trim();
-    if (!lineClean) continue;
-
-    // Detect file boundaries in concatenated archives
-    if (lineClean.startsWith('--- File:') || lineClean.startsWith('File:')) {
-      currentFile = lineClean.replace(/--- File:\s*/, '').replace(/\s*---/, '').trim();
-      continue;
-    }
-
-    const fileLower = currentFile.toLowerCase();
-    // Exclude documentation, lockfiles, and non-source files from static code analysis
-    if (
-      fileLower.endsWith('.md') ||
-      fileLower.endsWith('.markdown') ||
-      fileLower.endsWith('.txt') ||
-      fileLower.endsWith('.lock') ||
-      fileLower.endsWith('.json') ||
-      fileLower.includes('docs/') ||
-      fileLower.includes('package-lock.json')
-    ) {
-      continue;
-    }
-
-    const lineLower = lineClean.toLowerCase();
-
-    // Skip code comments unless they contain an explicit live token signature
-    if (
-      lineClean.startsWith('//') ||
-      lineClean.startsWith('#') ||
-      lineClean.startsWith('*') ||
-      lineClean.startsWith('/*') ||
-      lineClean.startsWith('<!--')
-    ) {
-      const hasToken = /AKIA[0-9A-Z]{16}|ghp_[0-9a-zA-Z]{36}|AIzaSy[0-9a-zA-Z_-]{33}|bearer\s+eyJ/i.test(lineClean);
-      if (!hasToken) continue;
-    }
-
-    // Skip CSS classes, Tailwind color declarations, and UI attributes
-    if (
-      lineLower.includes('classname=') ||
-      lineLower.includes('class=') ||
-      lineLower.includes('text-critical-red') ||
-      lineLower.includes('border-critical-red') ||
-      lineLower.includes('bg-critical-red') ||
-      lineLower.includes('style=')
-    ) {
-      continue;
-    }
-
-    // Skip standard React form hooks, states, and attributes
-    if (
-      lineLower.includes('usestate(') ||
-      lineLower.includes('setpassword') ||
-      lineLower.includes('showpassword') ||
-      lineLower.includes('type="password"') ||
-      lineLower.includes("type='password'") ||
-      lineLower.includes('placeholder=')
-    ) {
-      continue;
-    }
-
-    // 1. Real SQL Injection (concatenation / formatting of variables into SQL queries)
-    const isSqli = (
-      (lineLower.includes('select ') && lineLower.includes(' from ') && (lineClean.includes('+') || lineClean.includes('${') || lineClean.includes('%s'))) ||
-      (lineLower.includes('cursor.execute(') && (lineClean.includes('+') || lineClean.includes('%') || lineClean.includes('f"') || lineClean.includes("f'")))
-    );
-
-    // 2. Real Hardcoded Secret Tokens (actual high-entropy credentials, not field names)
-    const hasSecretPattern = /AKIA[0-9A-Z]{16}|ghp_[0-9a-zA-Z]{36}|AIzaSy[0-9a-zA-Z_-]{33}|bearer\s+eyJ[a-zA-Z0-9_-]{10,}|-----BEGIN\s+[A-Z\s]+PRIVATE\s+KEY-----/i.test(lineClean);
-    const isSecretAssignment = (
-      (lineLower.includes('aws_secret') || lineLower.includes('private_key') || lineLower.includes('secret_key')) &&
-      lineClean.includes('=') &&
-      /['"][a-zA-Z0-9_\-+=/]{16,}['"]/.test(lineClean) &&
-      !lineLower.includes('your-') &&
-      !lineLower.includes('placeholder') &&
-      !lineLower.includes('example') &&
-      !lineLower.includes('test')
-    );
-    const isSecret = hasSecretPattern || isSecretAssignment;
-
-    // 3. Real Remote Code Execution (dynamic eval/exec of user inputs or shell=True)
-    const isRce = (
-      (lineLower.includes('eval(') || lineLower.includes('exec(')) && (lineLower.includes('req.') || lineLower.includes('params') || lineLower.includes('body') || lineLower.includes('input'))
-    ) || (
-      (lineLower.includes('subprocess.popen(') || lineLower.includes('subprocess.call(') || lineLower.includes('subprocess.run(')) && lineLower.includes('shell=true')
-    );
-
-    // 4. Real Cross-Site Scripting (injection of user input directly into unescaped DOM)
-    const isXss = (
-      lineLower.includes('dangerouslysetinnerhtml') && (lineLower.includes('req.') || lineLower.includes('params') || lineLower.includes('body') || lineLower.includes('input') || lineLower.includes('html'))
-    ) || (
-      lineLower.includes('document.write(') && (lineLower.includes('req.') || lineLower.includes('input') || lineLower.includes('location.'))
-    );
-
-    // 5. Build/Server log attacks (e.g. from WAF or firewall audit logs)
-    const isLogAttack = (
-      lineClean.startsWith('[CRITICAL]') || lineClean.startsWith('[SECURITY]') || lineClean.startsWith('[WAF]')
-    ) && (lineLower.includes('injection') || lineLower.includes('brute-force') || lineLower.includes('leak') || lineLower.includes('unauthorized'));
-
-    const isCritical = isSqli || isSecret || isRce || isXss || isLogAttack;
-
-    // Real Warning: Insecure configuration
-    const isWarning = (
-      lineLower.includes('allow_origins=["*"]') ||
-      lineLower.includes("allow_origins=['*']") ||
-      (lineLower.includes('debug = true') && !lineLower.includes('test'))
-    );
-
-    if (isCritical) {
-      const flawType = isSqli ? 'SQL Injection' : isSecret ? 'Hardcoded Secret' : isRce ? 'Remote Code Execution (RCE)' : isXss ? 'Cross-Site Scripting (XSS)' : 'Security Violation';
-      
-      let rec = `Critical ${flawType} detected. Immediate remediation required.`;
-      if (isSqli) rec = `SQL Injection hazard: Concatenating untrusted parameters directly into raw queries. Use parameterized statements or an ORM.`;
-      else if (isSecret) rec = `Hardcoded credential in '${currentFile}': Exposed credentials in source code. Immediately revoke and migrate secret to an environment variable.`;
-      else if (isXss) rec = `XSS vulnerability in '${currentFile}': Untrusted DOM manipulation detected. Sanitize input or use safe text nodes.`;
-      else if (isRce) rec = `Remote Code Execution (RCE) danger in '${currentFile}': Executing dynamic input. Avoid eval/exec or strictly whitelist inputs.`;
-
-      findings.push({
-        severity: 'Critical',
-        message: `${currentFile} -> [${flawType}] ${lineClean}`,
-        recommendation: rec,
-        matched_line: lineClean
-      });
-      statusResult = 'Fail';
-    } else if (isWarning) {
-      findings.push({
-        severity: 'Warning',
-        message: `${currentFile} -> ${lineClean}`,
-        recommendation: 'Insecure configuration detected: Avoid wildcards in CORS origins and disable debug mode in production.',
-        matched_line: lineClean
-      });
-      if (statusResult === 'Pass') statusResult = 'Warning';
-    }
-
-    if (findings.length >= 300) {
-      break; // Cap to keep UI super smooth and responsive
-    }
-  }
-
-  return {
-    status: statusResult,
-    findings
-  };
-}
-
 export default function LogAnalyzer() {
   const [logText, setLogText] = useState<string>('');
   const [fileName, setFileName] = useState<string>('');
@@ -256,23 +131,9 @@ export default function LogAnalyzer() {
             {
               filter(entry) {
                 const name = entry.name.toLowerCase();
-                if (
-                  name.includes('node_modules/') ||
-                  name.includes('.git/') ||
-                  name.includes('.next/') ||
-                  name.includes('dist/') ||
-                  name.includes('build/') ||
-                  name.includes('docs/') ||
-                  name.includes('.github/') ||
-                  name.includes('package-lock.json')
-                ) {
-                  return false;
-                }
-                if (
-                  name.match(/\.(png|jpg|jpeg|gif|ico|svg|pdf|exe|dll|zip|tar|gz|7z|rar|mp4|webm|mp3|wav|woff|woff2|ttf|eot|otf|bin|iso|dmg|apk|jar|class|pyc|so|dylib|map|lock|md|markdown|txt|json)$/i)
-                ) {
-                  return false;
-                }
+                if (name.endsWith('/')) return false;
+                if (ARCHIVE_SKIP_DIRS.some((dir) => name.includes(dir))) return false;
+                if (ARCHIVE_SKIP_FILES.test(name) || ARCHIVE_SKIP_EXT.test(name)) return false;
                 return true;
               }
             },
@@ -291,8 +152,8 @@ export default function LogAnalyzer() {
           try {
             const text = decoder.decode(u8);
             extractedText += `\n--- File: ${name} ---\n` + text;
-            if (extractedText.length > 500000) {
-              extractedText += '\n... [TRUNCATED - LOG CONTENT REACHED SAFETY THRESHOLD] ...\n';
+            if (extractedText.length > MAX_ARCHIVE_TEXT) {
+              setError(`The archive is large: only the first ${MAX_ARCHIVE_TEXT.toLocaleString()} characters were analyzed.`);
               break;
             }
           } catch {
@@ -305,7 +166,7 @@ export default function LogAnalyzer() {
         } else {
           const finalExtracted = extractedText.trim();
           setLogText(finalExtracted);
-          runAnalysis(finalExtracted);
+          runAnalysis(finalExtracted, file.name);
         }
       } catch (err: any) {
         console.error('Error decompressing archive:', err);
@@ -317,7 +178,7 @@ export default function LogAnalyzer() {
         const text = (event.target?.result as string) || '';
         setLogText(text);
         if (text.trim()) {
-          runAnalysis(text);
+          runAnalysis(text, file.name);
         }
       };
       reader.readAsText(file);
@@ -346,50 +207,31 @@ export default function LogAnalyzer() {
     setFileName(sample.name);
     setLogText(sample.text);
     setError('');
-    runAnalysis(sample.text);
+    runAnalysis(sample.text, sample.name);
   };
 
-  const runAnalysis = async (customText?: string) => {
+  const runAnalysis = async (customText?: string, nameOverride?: string) => {
     const textToAnalyze = customText !== undefined ? customText : logText;
     if (!textToAnalyze.trim()) return;
     setLoading(true);
     setAnalysis(null);
     setError('');
 
-    // If payload is large (>50KB or multi-file archive), execute instant client-side AST engine
-    // to bypass Cloudflare/Render edge WAF 403 blocks and avoid network overhead.
-    if (textToAnalyze.length > 50000 || textToAnalyze.includes('--- File:')) {
-      try {
-        const localResult = analyzeLocally(textToAnalyze);
-        setAnalysis(localResult);
-      } catch (e: any) {
-        setError('Local analysis encountered an error: ' + (e.message || e));
-      } finally {
-        setLoading(false);
-      }
-      return;
-    }
-
+    // Every analysis runs on the server so the same input always gives the same result.
+    // The text is sent base64-encoded so code and attack strings pass through proxies intact.
     try {
-      let b64 = '';
-      try {
-        b64 = btoa(unescape(encodeURIComponent(textToAnalyze)));
-      } catch {
-        b64 = '';
+      const bytes = new TextEncoder().encode(textToAnalyze);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i += 0x8000) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
       }
-      const payload = b64 ? { log_text_b64: b64 } : { log_text: textToAnalyze };
-      const res = await apiClient.post('/runs/analyze-manual', payload);
+      const res = await apiClient.post<AnalysisResult>('/runs/analyze-manual', {
+        log_text_b64: btoa(binary),
+        file_name: (nameOverride ?? fileName) || undefined,
+      });
       setAnalysis(res.data);
     } catch (err: any) {
-      console.warn('Backend analyzer unavailable or blocked by WAF. Falling back to browser AST engine...', err);
-      // Seamless zero-downtime fallback to local analysis
-      try {
-        const localResult = analyzeLocally(textToAnalyze);
-        setAnalysis(localResult);
-      } catch (fallbackErr: any) {
-        const errMsg = err.response?.data?.detail || err.message || 'Analysis failed.';
-        setError(typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg));
-      }
+      setError(describeRequestError(err, 'The analysis could not be completed. Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -437,12 +279,13 @@ export default function LogAnalyzer() {
 
       const tableData = analysis.findings.map(f => [
         f.severity,
+        f.file && f.line ? `${f.file}:${f.line}` : '',
         f.message,
         f.recommendation || 'Review issue'
       ]);
 
       autoTable(doc, {
-        head: [['Severity', 'Finding / Location', 'Remediation Advice']],
+        head: [['Severity', 'Location', 'Finding', 'Remediation Advice']],
         body: tableData,
         startY: 44,
         headStyles: { fillColor: [59, 130, 246] },
@@ -458,9 +301,13 @@ export default function LogAnalyzer() {
   const exportCSV = () => {
     if (!analysis) return;
     const rows = [
-      ['Severity', 'Finding / Location', 'Remediation Guidance'],
+      ['Severity', 'Rule', 'File', 'Line', 'Count', 'Finding', 'Remediation Guidance'],
       ...analysis.findings.map(f => [
         `"${f.severity}"`,
+        `"${f.rule_id || ''}"`,
+        `"${(f.file || '').replace(/"/g, '""')}"`,
+        `"${f.line ?? ''}"`,
+        `"${f.count ?? 1}"`,
         `"${(f.message || '').replace(/"/g, '""')}"`,
         `"${(f.recommendation || '').replace(/"/g, '""')}"`
       ])
@@ -484,6 +331,14 @@ export default function LogAnalyzer() {
 
   const criticalCount = (analysis?.findings || []).filter(f => f.severity === 'Critical').length;
   const warningCount = (analysis?.findings || []).filter(f => f.severity === 'Warning').length;
+  const infoCount = (analysis?.findings || []).filter(f => f.severity === 'Info').length;
+  const summary = analysis?.summary;
+  const sevStyle = (sev: string) =>
+    sev === 'Critical'
+      ? { card: 'border-rose-200 dark:border-rose-900/40 bg-rose-50/20 dark:bg-rose-950/10', badge: 'bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400' }
+      : sev === 'Warning'
+        ? { card: 'border-amber-200 dark:border-amber-900/40 bg-amber-50/20 dark:bg-amber-950/10', badge: 'bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400' }
+        : { card: 'border-slate-200 dark:border-slate-800', badge: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300' };
 
   return (
     <div className="space-y-6">
@@ -495,7 +350,7 @@ export default function LogAnalyzer() {
             Ad-Hoc Log & Codebase Analyzer
           </h2>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Upload ZIP archives or paste raw output for deterministic vulnerability detection, AST triage, and AI fixes.
+            Paste a log or code, or upload a file or ZIP. Reports real errors (stack traces, failed builds and tests, crashes, HTTP 5xx, attacks) and real code risks (leaked keys, injection, XSS), each with its file and line.
           </p>
         </div>
       </div>
@@ -544,7 +399,7 @@ export default function LogAnalyzer() {
             <input
               type="file"
               onChange={handleFileUpload}
-              accept=".zip,.txt,.log,.json,.js,.ts,.jsx,.tsx,.py,.env,.yaml,.yml,.sql,.html,.sh"
+              accept=".zip,.txt,.log,.out,.json,.js,.ts,.jsx,.tsx,.mjs,.cjs,.py,.java,.go,.rb,.php,.cs,.env,.yaml,.yml,.toml,.ini,.properties,.sql,.html,.sh,.ps1"
               className="sr-only"
             />
           </label>
@@ -569,7 +424,7 @@ export default function LogAnalyzer() {
                 </>
               ) : (
                 <>
-                  <Search className="w-4 h-4" /> Run Vulnerability Scan
+                  <Search className="w-4 h-4" /> Analyze
                 </>
               )}
             </button>
@@ -590,8 +445,13 @@ export default function LogAnalyzer() {
         <textarea
           rows={7}
           value={logText}
-          onChange={(e) => setLogText(e.target.value)}
-          placeholder="Paste server logs, build logs, ESLint outputs, or paste code snippets directly here (or select a 1-click test scenario above)..."
+          onChange={(e) => {
+            setLogText(e.target.value);
+            // Typed or pasted text is no longer the uploaded file or sample: let the server
+            // decide from the content whether it is a log or code.
+            if (fileName) setFileName('');
+          }}
+          placeholder="Paste a server log, build or test output, browser console errors, or source code here (or pick a sample above)..."
           className="w-full p-4 font-mono text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 resize-y"
         />
       </div>
@@ -617,7 +477,7 @@ export default function LogAnalyzer() {
 
             <div className="p-5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase text-slate-400">Critical Vulnerabilities</p>
+                <p className="text-xs font-semibold uppercase text-slate-400">Critical / Errors</p>
                 <p className="text-2xl font-bold mt-1 text-rose-500 font-mono">{criticalCount}</p>
               </div>
               <ShieldAlert className="w-10 h-10 text-rose-500/20" />
@@ -625,18 +485,28 @@ export default function LogAnalyzer() {
 
             <div className="p-5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase text-slate-400">Warnings & Advisories</p>
+                <p className="text-xs font-semibold uppercase text-slate-400">Warnings</p>
                 <p className="text-2xl font-bold mt-1 text-amber-500 font-mono">{warningCount}</p>
               </div>
               <AlertTriangle className="w-10 h-10 text-amber-500/20" />
             </div>
           </div>
 
+          {summary && (
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Checked {summary.lines_analyzed.toLocaleString()} line{summary.lines_analyzed === 1 ? '' : 's'} in {summary.files_analyzed} file{summary.files_analyzed === 1 ? '' : 's'}
+              {summary.inputs.length > 0 && ` (read as: ${Array.from(new Set(summary.inputs.filter(i => i.type !== 'skip').map(i => i.type))).join(', ') || 'none'})`}
+              {summary.files_skipped > 0 && `; ${summary.files_skipped} lock/asset file${summary.files_skipped === 1 ? '' : 's'} skipped`}
+              {infoCount > 0 && `; ${infoCount} informational note${infoCount === 1 ? '' : 's'}`}
+              {summary.truncated && '; only the first 500 findings are shown'}.
+            </p>
+          )}
+
           {/* Action Toolbar */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold uppercase text-slate-400 mr-2">Filter:</span>
-              {(['ALL', 'CRITICAL', 'WARNING'] as const).map((sev) => (
+              {(['ALL', 'CRITICAL', 'WARNING', 'INFO'] as const).map((sev) => (
                 <button
                   key={sev}
                   onClick={() => setFilterSeverity(sev)}
@@ -688,37 +558,56 @@ export default function LogAnalyzer() {
           <div className="space-y-3">
             {filteredFindings.length === 0 ? (
               <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-500 text-sm">
-                No findings match the selected filter.
+                {analysis.findings.length === 0
+                  ? 'No errors or risks were found in this input.'
+                  : 'No findings match the selected filter.'}
               </div>
             ) : (
               filteredFindings.map((finding, idx) => (
                 <div
-                  key={idx}
-                  className={`p-4 rounded-xl border bg-white dark:bg-slate-900 shadow-sm transition ${
-                    finding.severity === 'Critical'
-                      ? 'border-rose-200 dark:border-rose-900/40 bg-rose-50/20 dark:bg-rose-950/10'
-                      : 'border-amber-200 dark:border-amber-900/40 bg-amber-50/20 dark:bg-amber-950/10'
-                  }`}
+                  key={`${finding.file}-${finding.line}-${finding.rule_id}-${idx}`}
+                  className={`p-4 rounded-xl border bg-white dark:bg-slate-900 shadow-sm transition ${sevStyle(finding.severity).card}`}
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-3">
+                    <div className="flex items-start gap-3 min-w-0">
                       {finding.severity === 'Critical' ? (
                         <ShieldAlert className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
-                      ) : (
+                      ) : finding.severity === 'Warning' ? (
                         <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                      ) : (
+                        <Info className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
                       )}
-                      <div>
-                        <span className={`inline-block px-2 py-0.5 text-[10px] font-bold uppercase rounded mb-1 ${
-                          finding.severity === 'Critical' ? 'bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400' : 'bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400'
-                        }`}>
-                          {finding.severity}
-                        </span>
-                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 font-mono">
-                          {finding.message}
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                          <span className={`inline-block px-2 py-0.5 text-[10px] font-bold uppercase rounded ${sevStyle(finding.severity).badge}`}>
+                            {finding.severity}
+                          </span>
+                          {finding.category && (
+                            <span className="text-[10px] font-semibold uppercase text-slate-500 dark:text-slate-400">{finding.category}</span>
+                          )}
+                          {finding.file && finding.line ? (
+                            <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">{finding.file}:{finding.line}</span>
+                          ) : null}
+                          {finding.count && finding.count > 1 ? (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">×{finding.count}</span>
+                          ) : null}
+                        </div>
+                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                          {finding.title || finding.message}
+                          {finding.detail && <span className="font-normal text-slate-700 dark:text-slate-300"> — {finding.detail}</span>}
                         </p>
+                        {finding.matched_line && (
+                          <pre className="mt-1.5 text-[11px] font-mono text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded px-2 py-1 overflow-x-auto whitespace-pre-wrap break-all">{finding.matched_line}</pre>
+                        )}
+                        {finding.context && finding.context.length > 0 && (
+                          <details className="mt-1.5">
+                            <summary className="text-[11px] text-slate-500 cursor-pointer">Stack / context ({finding.context.length} lines)</summary>
+                            <pre className="mt-1 text-[11px] font-mono text-slate-600 dark:text-slate-400 whitespace-pre-wrap break-all">{finding.context.join('\n')}</pre>
+                          </details>
+                        )}
                         {finding.recommendation && (
                           <p className="text-xs text-slate-600 dark:text-slate-400 mt-1.5 leading-relaxed">
-                            💡 <span className="font-medium text-slate-700 dark:text-slate-300">Fix Guidance:</span> {finding.recommendation}
+                            💡 <span className="font-medium text-slate-700 dark:text-slate-300">What to do:</span> {finding.recommendation}
                           </p>
                         )}
                       </div>

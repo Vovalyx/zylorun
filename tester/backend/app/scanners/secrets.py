@@ -3,7 +3,7 @@ import re
 import time
 import json
 import subprocess
-from typing import List, Tuple
+from typing import Any, Dict, List, Tuple
 from app.scanners.models import FindingItem, ToolCoverage, is_test_or_benchmark_path
 
 SECRET_PATTERNS = {

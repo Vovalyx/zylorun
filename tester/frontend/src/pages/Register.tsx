@@ -44,15 +44,6 @@ export default function Register() {
     <div className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden bg-background-light dark:bg-background-dark">
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-brand-500/10 blur-[100px] rounded-full pointer-events-none" />
       
-      {/* Top Left Floating Back to Home Button */}
-      <Link
-        to="/"
-        className="absolute top-6 left-6 z-20 flex items-center gap-2 px-3.5 py-2 rounded-xl bg-surface-light/80 dark:bg-slate-900/80 backdrop-blur-md border border-border-light dark:border-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-brand-500 dark:hover:text-white hover:border-brand-500/40 transition-all shadow-sm group"
-        title="Return to Zylorun homepage"
-      >
-        <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1 text-brand-500" />
-        <span>Back to Home</span>
-      </Link>
 
       <div className="w-full max-w-md p-8 rounded-2xl bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark shadow-xl shadow-black/5 dark:shadow-black/20 z-10">
         {/* In-Card Back Link Header */}

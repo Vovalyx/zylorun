@@ -25,16 +25,80 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def run_migrations():
+def _alembic_config():
     from alembic.config import Config
-    from alembic import command
-    # Assuming the working directory is backend
     import os
-    alembic_ini_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic.ini")
-    alembic_cfg = Config(alembic_ini_path)
+    backend_dir = os.path.dirname(os.path.dirname(__file__))
+    alembic_cfg = Config(os.path.join(backend_dir, "alembic.ini"))
     # Set the script location manually just in case
-    alembic_cfg.set_main_option("script_location", os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic"))
-    command.upgrade(alembic_cfg, "head")
+    alembic_cfg.set_main_option("script_location", os.path.join(backend_dir, "alembic"))
+    return alembic_cfg
+
+
+def adopt_existing_schema() -> None:
+    """Brings a database that was built outside Alembic up to the current models.
+
+    Earlier builds created tables with create_all() and ad-hoc ALTER statements, so
+    such a database has the tables but no (or an outdated) migration record, and a
+    normal upgrade stops with "already exists". This only ever ADDS what is missing
+    (tables, then columns as nullable); it never drops or rewrites anything. It then
+    verifies every model table and column exists and raises if one does not.
+    """
+    from sqlalchemy import inspect, text
+    from app.database.session import sync_engine, Base
+    from app.database import models  # noqa: F401  (registers every table)
+
+    Base.metadata.create_all(bind=sync_engine)
+
+    inspector = inspect(sync_engine)
+    quote = sync_engine.dialect.identifier_preparer.quote
+    added = []
+    with sync_engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            existing = {c["name"] for c in inspector.get_columns(table.name)}
+            for column in table.columns:
+                if column.name not in existing:
+                    column_type = column.type.compile(dialect=sync_engine.dialect)
+                    conn.execute(text(f"ALTER TABLE {quote(table.name)} ADD COLUMN {quote(column.name)} {column_type}"))
+                    added.append(f"{table.name}.{column.name}")
+
+    inspector = inspect(sync_engine)
+    tables = set(inspector.get_table_names())
+    missing = []
+    for table in Base.metadata.sorted_tables:
+        if table.name not in tables:
+            missing.append(table.name)
+            continue
+        present = {c["name"] for c in inspector.get_columns(table.name)}
+        missing.extend(f"{table.name}.{c.name}" for c in table.columns if c.name not in present)
+    if missing:
+        raise RuntimeError("Database schema could not be brought up to date; still missing: " + ", ".join(missing[:10]))
+    if added:
+        logger.warning("Added columns missing from the existing database: %s", ", ".join(added))
+
+
+def run_migrations():
+    """Applies migrations. If the upgrade fails because the database was created
+    outside Alembic, the existing schema is completed, verified and recorded as
+    current; if it cannot be verified, the error is raised and startup stops."""
+    from alembic import command
+
+    alembic_cfg = _alembic_config()
+    try:
+        command.upgrade(alembic_cfg, "head")
+        return
+    except Exception as upgrade_error:
+        logger.warning(
+            "Migration upgrade failed (%s: %s). Checking whether this database was created outside Alembic...",
+            upgrade_error.__class__.__name__, str(upgrade_error).splitlines()[0][:200],
+        )
+        try:
+            adopt_existing_schema()
+            command.stamp(alembic_cfg, "head")
+        except Exception as adopt_error:
+            logger.error("The existing schema could not be adopted: %s", adopt_error)
+            raise upgrade_error
+        logger.warning("Existing schema verified against the models and recorded as the current migration.")
 
 DISABLED_PASSWORD_HASH = "!disabled"
 MIN_ADMIN_PASSWORD_LENGTH = 12

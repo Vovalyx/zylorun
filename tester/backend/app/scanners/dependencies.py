@@ -169,6 +169,8 @@ def run_dependency_scan(repo_path: str, fingerprint_generator) -> Tuple[List[Fin
         dirs[:] = [d for d in dirs if d not in {".git", "node_modules", "venv", ".venv", "dist", "build"}]
         for f in files:
             full_path = os.path.join(root, f)
+            if os.path.islink(full_path):
+                continue  # never follow links out of the repository being scanned
             rel_path = os.path.relpath(full_path, repo_path).replace("\\", "/")
             if f in {"requirements.txt", "Pipfile.lock"}:
                 manifest_files.append(rel_path)

@@ -1,3 +1,4 @@
+import os
 import sys
 import time
 import json
@@ -127,7 +128,13 @@ def main():
     # Test 4: Master Admin Contact Messages Inbox Verification
     print_section("Test 4: Admin Portal Inbox Telemetry & Message Retrieval")
     # Login as admin to get token
-    login_data = f"username={urllib.parse.quote('admin')}&password={urllib.parse.quote('VovalyxAdmin2026!')}".encode("utf-8")
+    # Administrator credentials are never stored in this script: set ADMIN_USERNAME
+    # and ADMIN_PASSWORD in the environment to the values the server was started with.
+    admin_username = os.environ.get("ADMIN_USERNAME", "admin")
+    admin_password = os.environ.get("ADMIN_PASSWORD", "")
+    if not admin_password:
+        raise SystemExit("Set ADMIN_PASSWORD (and ADMIN_USERNAME) in the environment to run the admin inbox test.")
+    login_data = f"username={urllib.parse.quote(admin_username)}&password={urllib.parse.quote(admin_password)}".encode("utf-8")
     req = urllib.request.Request(
         f"{API_BASE}/auth/login",
         data=login_data,

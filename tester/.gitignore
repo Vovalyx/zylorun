@@ -12,3 +12,6 @@ frontend/dist/
 
 __pycache__/
 *.pyc
+
+# Locally generated development secrets (never commit)
+.dev_secrets.json

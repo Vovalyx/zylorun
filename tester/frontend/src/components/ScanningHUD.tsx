@@ -32,11 +32,11 @@ export interface ScanningHUDProps {
 
 const PHASES = [
   { id: 1, name: 'TREE RESOLUTION', desc: 'Cloning tree & resolving commit delta', icon: Cpu },
-  { id: 2, name: 'SAST TAINT MATRIX', desc: 'AST traversal across Python, TS & JS', icon: FileCode },
-  { id: 3, name: 'ENTROPY VAULT AUDIT', desc: '40+ credential formats & token entropy', icon: Lock },
+  { id: 2, name: 'SAST PATTERN SCAN', desc: 'Security pattern rules for Python, TS & JS', icon: FileCode },
+  { id: 3, name: 'SECRET SCAN', desc: 'Known credential and token formats', icon: Lock },
   { id: 4, name: 'OSV CVE INTELLIGENCE', desc: 'Querying authoritative vulnerability DB', icon: Shield },
   { id: 5, name: 'HUB CONTINUOUS SUITE', desc: 'Executing 10 continuous analyzers', icon: Layers },
-  { id: 6, name: 'RISK PASSPORT VERIFICATION', desc: 'Computing mathematical score & deltas', icon: ShieldCheck },
+  { id: 6, name: 'RISK SCORE', desc: 'Calculating score and change since last scan', icon: ShieldCheck },
 ];
 
 export const ScanningHUD: React.FC<ScanningHUDProps> = ({
@@ -45,7 +45,7 @@ export const ScanningHUD: React.FC<ScanningHUDProps> = ({
   commitSha = 'HEAD',
   scanStatus,
   scanId,
-  riskScore = 100,
+  riskScore,
   actionableFindingsCount = 0,
   fixturesCount = 0,
   errorMessage,
@@ -55,9 +55,6 @@ export const ScanningHUD: React.FC<ScanningHUDProps> = ({
   onRetry,
 }) => {
   const [currentPhaseIdx, setCurrentPhaseIdx] = useState(0);
-  const [filesScanned, setFilesScanned] = useState(0);
-  const [locScanned, setLocScanned] = useState(0);
-  const [rulesEvaluated, setRulesEvaluated] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [terminalLogs, setTerminalLogs] = useState<string[]>([]);
   const isCompleted = scanStatus === 'COMPLETED' || scanStatus === 'PARTIAL';
@@ -67,9 +64,6 @@ export const ScanningHUD: React.FC<ScanningHUDProps> = ({
   useEffect(() => {
     if (!isOpen) {
       setCurrentPhaseIdx(0);
-      setFilesScanned(0);
-      setLocScanned(0);
-      setRulesEvaluated(0);
       setElapsedSeconds(0);
       setTerminalLogs([]);
       return;
@@ -82,15 +76,13 @@ export const ScanningHUD: React.FC<ScanningHUDProps> = ({
     return () => clearInterval(timer);
   }, [isOpen]);
 
-  // Phase cycling & telemetry simulation during running state
+  // The server reports only queued/running/finished, so the step list simply cycles
+  // while the scan runs. No file, line or rule counts are invented here.
   useEffect(() => {
     if (!isOpen || isCompleted || isFailed) return;
 
     const interval = setInterval(() => {
       setCurrentPhaseIdx((prev) => (prev < PHASES.length - 1 ? prev + 1 : prev));
-      setFilesScanned((prev) => Math.min(prev + Math.floor(Math.random() * 8 + 4), 185));
-      setLocScanned((prev) => Math.min(prev + Math.floor(Math.random() * 450 + 200), 28400));
-      setRulesEvaluated((prev) => Math.min(prev + Math.floor(Math.random() * 35 + 15), 840));
     }, 700);
 
     return () => clearInterval(interval);
@@ -103,12 +95,12 @@ export const ScanningHUD: React.FC<ScanningHUDProps> = ({
     const logMessages = [
       `[INIT] Attached to repository target: ${repoName}`,
       `[TARGET] Resolving commit SHA: ${commitSha ? commitSha.substring(0, 10) : 'HEAD'}`,
-      `[PHASE-1] Sandboxed memory worktree created. Git tree hashes verified.`,
-      `[PHASE-2] SAST Engine: Traversing AST nodes for SQLi, XSS, and command injection taint paths...`,
-      `[PHASE-3] Entropy Scanner: Checking 40+ high-entropy credential patterns (AWS, Stripe, JWT)...`,
+      `[PHASE-1] Checking out the requested commit in a temporary workspace...`,
+      `[PHASE-2] SAST: matching security pattern rules (SQL injection, XSS, command injection)...`,
+      `[PHASE-3] Secret scan: checking known credential formats (AWS, GitHub, JWT and others)...`,
       `[PHASE-4] Dependency Engine: Querying authoritative OSV vulnerability advisory database...`,
       `[PHASE-5] Continuous Suite: Executing 10 Project Hub analyzers (API, DB, CI/CD, Quality)...`,
-      `[PHASE-6] Risk Engine: Synthesizing Bayesian risk score passport...`,
+      `[PHASE-6] Risk score: applying severity deductions to the findings...`,
     ];
 
     if (currentPhaseIdx < logMessages.length) {
@@ -117,11 +109,8 @@ export const ScanningHUD: React.FC<ScanningHUDProps> = ({
     }
 
     if (isCompleted) {
-      const finalMsg = `[SUCCESS] Scan #${scanId || 'OK'} finalized. Score: ${riskScore ?? 100}/100. Actionable vulnerabilities: ${actionableFindingsCount}.`;
+      const finalMsg = `[SUCCESS] Scan #${scanId || 'OK'} finalized. Score: ${riskScore ?? 'n/a'}/100. Actionable vulnerabilities: ${actionableFindingsCount}.`;
       setTerminalLogs((prev) => (prev.includes(finalMsg) ? prev : [...prev, finalMsg]));
-      setFilesScanned(185);
-      setLocScanned(28400);
-      setRulesEvaluated(840);
     }
   }, [currentPhaseIdx, isCompleted, isOpen, repoName, commitSha, scanId, riskScore, actionableFindingsCount]);
 
@@ -191,7 +180,7 @@ export const ScanningHUD: React.FC<ScanningHUDProps> = ({
                   Codebase Security Verified
                 </div>
                 <h2 className="text-3xl font-extrabold text-white tracking-tight">
-                  Risk Passport Score: {riskScore ?? 100} / 100
+                  Risk Passport Score: {riskScore ?? 'n/a'} / 100
                 </h2>
                 <p className="text-slate-400 text-sm max-w-md mx-auto mt-1">
                   Commit analysis finalized deterministically with zero unhandled exceptions. Continuous analyzers and repository DNA indexed.
@@ -336,24 +325,24 @@ export const ScanningHUD: React.FC<ScanningHUDProps> = ({
 
               {/* Right Column: Live Telemetry & Phase Matrix */}
               <div className="md:col-span-7 space-y-4">
-                {/* Metric Counters */}
+                {/* Real values only: elapsed time, server status and the finished scan's result */}
                 <div className="grid grid-cols-3 gap-3">
                   <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
-                    <div className="text-[10px] uppercase font-semibold text-slate-400">Files Audited</div>
+                    <div className="text-[10px] uppercase font-semibold text-slate-400">Elapsed</div>
                     <div className="text-xl font-extrabold text-brand-400 font-mono">
-                      {filesScanned}
+                      {elapsedSeconds.toFixed(1)}s
                     </div>
                   </div>
                   <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
-                    <div className="text-[10px] uppercase font-semibold text-slate-400">LOC Inspected</div>
+                    <div className="text-[10px] uppercase font-semibold text-slate-400">Scan Status</div>
                     <div className="text-xl font-extrabold text-emerald-400 font-mono">
-                      {locScanned.toLocaleString()}
+                      {scanStatus || 'QUEUED'}
                     </div>
                   </div>
                   <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
-                    <div className="text-[10px] uppercase font-semibold text-slate-400">Checks Run</div>
+                    <div className="text-[10px] uppercase font-semibold text-slate-400">Actionable Findings</div>
                     <div className="text-xl font-extrabold text-purple-400 font-mono">
-                      {rulesEvaluated}
+                      {isCompleted ? actionableFindingsCount : '—'}
                     </div>
                   </div>
                 </div>

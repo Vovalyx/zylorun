@@ -51,3 +51,6 @@ tester/google-generative-ai/
 tester/clone_test*
 temp_bare/
 temp_clone/
+
+# Locally generated development secrets (never commit)
+.dev_secrets.json

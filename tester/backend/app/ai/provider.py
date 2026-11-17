@@ -302,23 +302,14 @@ class AnthropicProvider(AIProvider):
 class GeminiProvider(AIProvider):
     """Google Gemini API provider implementation."""
 
-    _FALLBACK_TOKEN_B64 = "QVEuQWI4Uk42SlJ4aTNCZ1dnaFJyTjBNSkpvNWFZRThFRHBWc1V0Vk02dnM5Unp0UXVSdnc="
-
-    @classmethod
-    def get_default_key(cls) -> str:
-        try:
-            import base64
-            return base64.b64decode(cls._FALLBACK_TOKEN_B64).decode()
-        except Exception:
-            return ""
-
     def __init__(
         self,
         api_key: Optional[str] = None,
         model: Optional[str] = None,
         timeout: float = 15.0,
     ) -> None:
-        self.api_key = api_key or os.getenv("GEMINI_API_KEY") or self.get_default_key()
+        # The key comes only from the caller or the environment; there is no built-in key.
+        self.api_key = api_key or os.getenv("GEMINI_API_KEY") or ""
         self.model = model or os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest")
         self.timeout = timeout
         self.base_url = "https://generativelanguage.googleapis.com/v1beta"

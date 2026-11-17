@@ -1,6 +1,6 @@
 from enum import Enum
 from typing import List, Dict, Any
-from app.scanners.models import is_test_or_benchmark_path
+from app.scanners.models import finding_is_fixture
 
 class Severity(str, Enum):
     CRITICAL = "Critical"
@@ -48,11 +48,7 @@ def calculate_risk_score(findings: List[Dict[str, Any]], coverage_status: str = 
 
         # Check if finding is an intentional test fixture, sample credential, or architectural size metric
         is_non_security_or_fixture = (
-            finding.get("classification") == "Intentional test fixture or demonstration example"
-            or finding.get("is_test_fixture") is True
-            or is_test_or_benchmark_path(finding.get("file_path") or finding.get("file"))
-            or "(Test Fixture)" in (finding.get("title") or "")
-            or "(Sample / Test Fixture)" in (finding.get("title") or "")
+            finding_is_fixture(finding)
             or finding.get("rule_id") in {"QUAL-HIGH-COMPLEXITY", "QUAL-LARGE-FILE"}
         )
         if is_non_security_or_fixture:

@@ -148,6 +148,25 @@ def get_python_string_literal_lines(file_path: str) -> set:
     except Exception:
         return set()
 
+def get_python_string_spans(file_path: str) -> dict:
+    """Maps line number -> [(start_col, end_col)] for single-line string constants."""
+    spans: dict = {}
+    try:
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            tree = ast.parse(f.read(), filename=file_path)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                if getattr(node, "end_lineno", None) == node.lineno and getattr(node, "end_col_offset", None) is not None:
+                    spans.setdefault(node.lineno, []).append((node.col_offset, node.end_col_offset))
+    except Exception:
+        return {}
+    return spans
+
+
+def match_is_inside_string(spans: list, start: int, end: int) -> bool:
+    return any(s_col <= start and end <= e_col for s_col, e_col in spans)
+
+
 def run_sast_scan(repo_path: str, fingerprint_generator) -> Tuple[List[FindingItem], ToolCoverage]:
     start_time = time.time()
     findings: List[FindingItem] = []
@@ -218,6 +237,8 @@ def run_sast_scan(repo_path: str, fingerprint_generator) -> Tuple[List[FindingIt
                 continue
 
             full_path = os.path.join(root, f)
+            if os.path.islink(full_path):
+                continue  # never follow links out of the repository being scanned
             rel_path = os.path.relpath(full_path, repo_path).replace("\\", "/")
             try:
                 if os.path.getsize(full_path) > MAX_FILE_BYTES:
@@ -225,6 +246,7 @@ def run_sast_scan(repo_path: str, fingerprint_generator) -> Tuple[List[FindingIt
                 files_scanned += 1
                 is_py = (ext == ".py")
                 str_literal_lines = get_python_string_literal_lines(full_path) if is_py else set()
+                str_spans = get_python_string_spans(full_path) if is_py else {}
                 is_test_file = is_test_or_benchmark_path(rel_path)
 
                 with open(full_path, "r", encoding="utf-8", errors="ignore") as fh:
@@ -236,9 +258,16 @@ def run_sast_scan(repo_path: str, fingerprint_generator) -> Tuple[List[FindingIt
                             continue
 
                         for rule in applicable_rules:
-                            if rule["pattern"].search(line):
+                            rule_match = rule["pattern"].search(line)
+                            if rule_match:
                                 snippet = line.strip()
                                 in_str_literal = (line_idx in str_literal_lines)
+                                # The whole match sits inside one string constant: the text is data
+                                # (for example a scanner's own keyword list), not a call that runs.
+                                quoted_only = (
+                                    is_py and not is_test_file
+                                    and match_is_inside_string(str_spans.get(line_idx, []), rule_match.start(), rule_match.end())
+                                )
 
                                 if is_test_file and in_str_literal:
                                     classification = "Intentional test fixture or demonstration example"
@@ -254,6 +283,13 @@ def run_sast_scan(repo_path: str, fingerprint_generator) -> Tuple[List[FindingIt
                                     evidence = f"Code matched rule pattern `{rule['pattern'].pattern}` in test/benchmark file at line {line_idx}. Verified as non-executable test example."
                                     impact = "Pattern defined as test fixture data; not executed in application runtime."
                                     remediation = "Verify that this code example remains isolated to test fixtures and is not executed in application runtime."
+                                elif quoted_only:
+                                    classification = "Valid heuristic finding requiring manual verification"
+                                    confidence = "Low"
+                                    severity = "Informational"
+                                    evidence = f"Rule pattern matched text that is entirely inside a string literal at line {line_idx}; it is not an executable call."
+                                    impact = "No direct impact: the matched text is string data. Review only if this string is later evaluated as code."
+                                    remediation = "No change needed unless the string is passed to eval/exec or a shell."
                                 else:
                                     classification = "Confirmed vulnerability or exposure"
                                     confidence = rule["confidence"]

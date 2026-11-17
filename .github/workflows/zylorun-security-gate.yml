@@ -1,0 +1,69 @@
+name: ZyloRun Security & Merge Gatekeeper
+
+# Notifies the ZyloRun API about a push or pull request. The request is signed
+# with the same HMAC scheme GitHub webhooks use, so the API can verify it, and
+# the job fails when the API rejects it (it no longer passes silently).
+#
+# Required repository settings:
+#   secret   ZYLORUN_WEBHOOK_SECRET  - same value as GITHUB_WEBHOOK_SECRET on the API
+#   variable ZYLORUN_API_URL         - e.g. https://zylorun.onrender.com
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  zylorun-gate:
+    name: ZyloRun Risk Assurance
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Notify ZyloRun
+        uses: actions/github-script@v7
+        env:
+          ZYLORUN_WEBHOOK_SECRET: ${{ secrets.ZYLORUN_WEBHOOK_SECRET }}
+          ZYLORUN_API_URL: ${{ vars.ZYLORUN_API_URL }}
+        with:
+          script: |
+            const crypto = require('crypto');
+            const secret = process.env.ZYLORUN_WEBHOOK_SECRET;
+            const apiUrl = (process.env.ZYLORUN_API_URL || '').replace(/\/+$/, '');
+            if (!secret || !apiUrl) {
+              core.notice('ZYLORUN_WEBHOOK_SECRET or ZYLORUN_API_URL is not configured; the ZyloRun gate did not run.');
+              return;
+            }
+
+            const pr = context.payload.pull_request;
+            const repo = context.repo;
+            const headSha = pr ? pr.head.sha : context.sha;
+            const body = JSON.stringify({
+              action: context.payload.action || 'push',
+              repository: {
+                html_url: `https://github.com/${repo.owner}/${repo.repo}`,
+                clone_url: `https://github.com/${repo.owner}/${repo.repo}.git`,
+                full_name: `${repo.owner}/${repo.repo}`
+              },
+              pull_request: pr ? { number: pr.number, head: { sha: headSha }, base: { sha: pr.base.sha } } : null,
+              after: headSha
+            });
+            const signature = 'sha256=' + crypto.createHmac('sha256', secret).update(body).digest('hex');
+
+            const res = await fetch(`${apiUrl}/webhooks/github`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-github-event': pr ? 'pull_request' : 'push',
+                'x-hub-signature-256': signature
+              },
+              body
+            });
+            const text = await res.text();
+            console.log(`ZyloRun responded with HTTP ${res.status}: ${text.slice(0, 500)}`);
+            if (!res.ok) {
+              core.setFailed(`ZyloRun rejected the gate request (HTTP ${res.status}).`);
+            }

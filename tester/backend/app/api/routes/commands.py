@@ -9,7 +9,7 @@ from datetime import datetime
 from app.database.session import get_db
 from app.database.models import CommandConfig, User
 from app.auth.deps import get_current_user, require_role
-from app.services.runner import APPROVED_EXECUTABLES
+from app.services.runner import APPROVED_EXECUTABLES, MAX_ARG_LENGTH, MAX_ARGS, executable_basename
 
 router = APIRouter(prefix="/commands", tags=["commands"])
 
@@ -23,10 +23,27 @@ class CommandCreate(BaseModel):
     @field_validator("executable")
     @classmethod
     def validate_executable(cls, v: str) -> str:
-        clean = v.strip().lower().split("/")[-1].split("\\")[-1]
+        clean = executable_basename(v)
         if clean not in APPROVED_EXECUTABLES:
             raise ValueError(f"Executable '{v}' is not in the approved security tools allowlist ({', '.join(sorted(APPROVED_EXECUTABLES))}).")
-        return v.strip()
+        # Store the bare tool name only; a path could point at a different program.
+        return clean
+
+    @field_validator("allowed_args")
+    @classmethod
+    def validate_allowed_args(cls, v: Any) -> Any:
+        parsed = v
+        if isinstance(v, str):
+            try:
+                parsed = json.loads(v) if v.strip() else []
+            except Exception:
+                raise ValueError("allowed_args must be a JSON list of strings.")
+        if not isinstance(parsed, list) or len(parsed) > MAX_ARGS:
+            raise ValueError(f"allowed_args must be a list of at most {MAX_ARGS} strings.")
+        for arg in parsed:
+            if not isinstance(arg, str) or not arg or len(arg) > MAX_ARG_LENGTH or any(ch in arg for ch in ("\n", "\r", "\x00")):
+                raise ValueError(f"Each argument must be a non-empty string of at most {MAX_ARG_LENGTH} characters.")
+        return parsed
 
     @field_validator("name")
     @classmethod
@@ -53,7 +70,7 @@ class CommandResponse(BaseModel):
 @router.post("/", response_model=CommandResponse, status_code=status.HTTP_201_CREATED)
 async def create_command(
     cmd_in: CommandCreate,
-    current_user: User = Depends(require_role(["Admin", "Analyst"])),
+    current_user: User = Depends(require_role(["Admin"])),
     db: AsyncSession = Depends(get_db)
 ):
     # Check if duplicate name exists

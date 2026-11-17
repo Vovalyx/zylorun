@@ -1,3 +1,6 @@
+# Render blueprint for the ZyloRun API.
+# No secret is ever written in this file. Values marked "sync: false" are typed
+# into the Render dashboard; "generateValue: true" lets Render create a random one.
 services:
   - type: web
     name: zylorun-api
@@ -5,16 +8,41 @@ services:
     rootDir: tester/backend
     buildCommand: "pip install -r requirements.txt"
     startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /health
     envVars:
       - key: ENVIRONMENT
         value: production
+      # Exact HTTPS origins of the web app, comma separated. A wildcard is rejected at startup.
       - key: FRONTEND_URL
-        value: "*"
+        value: "https://zylorun-five.vercel.app,https://zylorun.vercel.app"
       - key: DATABASE_URL
-        value: postgresql+asyncpg://postgres.zrtplsfswxegtigdvery:Fm7P8s7umt4OqqWv@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres
-      - key: GITHUB_WEBHOOK_SECRET
-        generateValue: true
+        sync: false
       - key: SECRET_KEY
+        generateValue: true
+      - key: GITHUB_WEBHOOK_SECRET
         generateValue: true
       - key: GITHUB_TOKEN_ENCRYPTION_KEY
         generateValue: true
+      - key: ZYLORUN_CRON_SECRET
+        generateValue: true
+      # Administrator sign-in. The admin account stays disabled until a password
+      # of at least 12 characters is set here.
+      - key: ADMIN_USERNAME
+        value: admin
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      # Optional: needed for password-reset e-mails and AI features.
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USERNAME
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false

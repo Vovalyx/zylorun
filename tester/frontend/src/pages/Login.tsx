@@ -14,7 +14,6 @@ export default function Login() {
   // Forgot password modal state
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
-  const [newPassword, setNewPassword] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
   const [resetSuccess, setResetSuccess] = useState('');
   const [resetError, setResetError] = useState('');
@@ -52,28 +51,15 @@ export default function Login() {
     setResetSuccess('');
     setResetLoading(true);
     try {
-      const res = await apiClient.post('/auth/reset-password', {
-        email: resetEmail.trim(),
-        new_password: newPassword
-      });
-      setResetSuccess(res.data?.message || 'Password successfully updated! You can now sign in.');
-      setUsername(resetEmail.trim());
-      setPassword(newPassword);
-      setTimeout(() => {
-        setResetModalOpen(false);
-        setResetSuccess('');
-      }, 2500);
+      // The server e-mails a single-use link; the password is never changed from this form.
+      const res = await apiClient.post('/auth/forgot-password', { email: resetEmail.trim() });
+      setResetSuccess(res.data?.message || 'If an account exists for that email, a password reset link has been sent.');
     } catch (err: any) {
       const detail = err.response?.data?.detail;
-      setResetError(typeof detail === 'string' ? detail : 'Failed to update password. Please check the email.');
+      setResetError(typeof detail === 'string' ? detail : 'Could not send the reset link. Please try again shortly.');
     } finally {
       setResetLoading(false);
     }
-  };
-
-  const fillAdmin = () => {
-    setUsername('admin@vovalyx.in');
-    setPassword('VovalyxAdmin2026!');
   };
 
   return (
@@ -185,14 +171,7 @@ export default function Login() {
           </button>
         </form>
 
-        <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800/80 flex items-center justify-between text-xs text-slate-500">
-          <button
-            type="button"
-            onClick={fillAdmin}
-            className="text-slate-400 hover:text-brand-400 transition"
-          >
-            ⚡ Quick-fill Admin
-          </button>
+        <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800/80 flex items-center justify-end text-xs text-slate-500">
           <Link to="/admin" className="text-slate-400 hover:text-brand-400 transition">
             Admin Portal &rarr;
           </Link>
@@ -234,7 +213,7 @@ export default function Login() {
               <h3 className="font-bold text-base">Reset Your Password</h3>
             </div>
             <p className="text-xs text-slate-400">
-              Enter your account email and choose a new password. Your account will be immediately updated.
+              Enter your account email. If an account exists, we will send a link to choose a new password.
             </p>
 
             {resetError && (
@@ -261,24 +240,12 @@ export default function Login() {
                   className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-brand-500"
                 />
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">New Password</label>
-                <input
-                  type="password"
-                  required
-                  minLength={4}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="At least 4 characters"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-brand-500 font-mono"
-                />
-              </div>
               <button
                 type="submit"
                 disabled={resetLoading}
                 className="w-full py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-bold rounded-lg text-xs transition shadow-md"
               >
-                {resetLoading ? 'Updating password…' : 'Update Password & Sign In'}
+                {resetLoading ? 'Sending link…' : 'Send reset link'}
               </button>
             </form>
           </div>

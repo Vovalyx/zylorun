@@ -39,6 +39,8 @@ class DocsOnboardingAnalyzer(BaseAnalyzer):
             dirs[:] = [d for d in dirs if d not in [".git", "node_modules", "venv", ".venv", "dist", "build", "__pycache__", ".pytest_cache"]]
             for fn in fnames:
                 full_p = os.path.join(root, fn)
+                if os.path.islink(full_p):
+                    continue  # never follow links out of the repository being scanned
                 rel_p = os.path.relpath(full_p, repo_dir).replace("\\", "/")
                 all_repo_files.add(rel_p)
 
@@ -162,6 +164,8 @@ class DocsOnboardingAnalyzer(BaseAnalyzer):
                 if not fn.endswith((".py", ".ts", ".tsx", ".js", ".jsx")):
                     continue
                 full_p = os.path.join(root, fn)
+                if os.path.islink(full_p):
+                    continue  # never follow links out of the repository being scanned
                 rel_p = os.path.relpath(full_p, repo_dir).replace("\\", "/")
 
                 try:

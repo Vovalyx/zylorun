@@ -7,11 +7,17 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   backend-benchmark-and-tests:
     name: Backend Regression & Benchmark Gate
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: tester/backend
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -23,29 +29,26 @@ jobs:
         with:
           python-version: '3.12'
           cache: 'pip'
+          cache-dependency-path: tester/backend/requirements.txt
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r backend/requirements.txt
+          pip install -r requirements.txt
           pip install pytest pytest-asyncio anyio httpx
 
-      - name: Run Security Benchmark & Accuracy Evaluation
-        run: |
-          PYTHONPATH=backend pytest -v backend/tests/test_benchmark_regression.py
-
-      - name: Run Pull Request Security Gate Tests
-        run: |
-          PYTHONPATH=backend pytest -v backend/tests/test_pr_gate.py
-
       - name: Run Complete Backend Test Suite
-        run: |
-          PYTHONPATH=backend pytest -v backend/tests
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///./ci_test.db
+        run: pytest -v
 
   frontend-build-and-assets:
     name: Frontend Typecheck, Build & Asset Integrity
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: tester/frontend
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -55,19 +58,16 @@ jobs:
         with:
           node-version: 20
           cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: tester/frontend/package-lock.json
 
       - name: Install dependencies
-        run: |
-          cd frontend
-          npm ci
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
 
       - name: Typecheck and Build
-        run: |
-          cd frontend
-          npm run build
+        run: npm run build
 
       - name: Verify Build Asset Integrity
-        run: |
-          cd frontend
-          npm run test:assets
+        run: npm run test:assets

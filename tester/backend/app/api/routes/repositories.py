@@ -85,27 +85,8 @@ def public_poll_error(message: str | None) -> str | None:
 
 
 
-async def get_current_user(request: Request, db: AsyncSession = Depends(get_db)):
-    authorization = request.headers.get("authorization", "")
-    token = authorization.removeprefix("Bearer ").strip() if authorization.startswith("Bearer ") else ""
-    try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        username = payload.get("sub")
-        if not username or payload.get("type") != "access": raise JWTError("invalid access token")
-    except JWTError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token", headers={"WWW-Authenticate": "Bearer"})
-    from sqlalchemy import or_, func
-    user = (await db.execute(
-        select(User).where(
-            or_(
-                func.lower(User.username) == username.lower(),
-                func.lower(User.email) == username.lower()
-            ),
-            User.is_active.is_(True)
-        )
-    )).scalars().first()
-    if not user: raise HTTPException(status_code=401, detail="User not found")
-    return user
+# Single shared implementation: tokens are validated in one place only.
+from app.auth.deps import get_current_user  # noqa: E402
 
 async def owned_repository(repository_id: int, current_user: User, db: AsyncSession) -> Repository:
     repo = (await db.execute(select(Repository).where(Repository.id == repository_id, Repository.owner_id == current_user.id))).scalars().first()

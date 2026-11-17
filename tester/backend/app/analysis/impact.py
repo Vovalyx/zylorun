@@ -161,6 +161,8 @@ def build_dependency_graph(repo_dir: str) -> Dict[str, List[str]]:
                 continue
 
             path = os.path.join(root, file)
+            if os.path.islink(path):
+                continue  # never follow links out of the repository being scanned
             rel_path = os.path.relpath(path, repo_dir).replace('\\', '/')
             graph[rel_path] = []
 

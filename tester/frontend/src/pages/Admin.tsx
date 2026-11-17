@@ -120,7 +120,7 @@ export default function Admin() {
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const u = loginUsername.trim().toLowerCase();
-    const p = loginPassword.trim();
+    const p = loginPassword;
     if (!u || !p) {
       setLoginError('Please enter both admin username and password.');
       return;
@@ -129,36 +129,7 @@ export default function Admin() {
     setLoginLoading(true);
     setLoginError(null);
 
-    // 1. Instant Master Admin Credential Verification (Prevents Render cold-start/rebuild 404 delays)
-    const isMasterUser = (
-      u === 'admin' || 
-      u === 'admin@vovalyx.in' || 
-      u === 'admin@zylorun.io' || 
-      u === 'varshith' || 
-      u === '4mh24cs167' || 
-      u === '4mh24cs167@gmail.com' ||
-      u === '4mh24cs181' || 
-      u === '4mh24cs181@gmail.com' ||
-      u === 'charan' ||
-      u === 'charansalanki8@gmail.com'
-    );
-    const isMasterPass = (
-      p === 'VovalyxAdmin2026!' ||
-      p === 'VovalyxAdmin2026' ||
-      p === 'admin' ||
-      p === 'admin123' ||
-      p === 'Admin@123'
-    );
-
-    if (isMasterUser && isMasterPass) {
-      const masterToken = 'vovalyx_admin_master_session_' + Date.now();
-      localStorage.setItem('admin_access_token', masterToken);
-      setAdminToken(masterToken);
-      setLoginLoading(false);
-      return;
-    }
-
-    // 2. Network verification with backend
+    // Credentials are verified by the server only; nothing is checked in the browser.
     try {
       const res = await axios.post(`${API_URL}/admin/login`, {
         username: u,

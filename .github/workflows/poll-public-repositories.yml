@@ -3,6 +3,8 @@ name: Poll Public Repositories
 on:
   workflow_dispatch:
 
+permissions: {}
+
 concurrency:
   group: gitflow-public-polling
   cancel-in-progress: false
@@ -22,13 +24,13 @@ jobs:
             -H "Authorization: Bearer ${GITFLOW_CRON_SECRET}" \
             -H "Content-Type: application/json" \
             "${RENDER_API_URL}/admin/polling/run")
-          
+
           HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
           BODY=$(echo "$RESPONSE" | sed '$d')
-          
+
           echo "Status: ${HTTP_CODE}"
           echo "Response: ${BODY}"
-          
+
           if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
             echo "::error::Polling endpoint returned HTTP ${HTTP_CODE}"
             exit 1

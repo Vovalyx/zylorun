@@ -798,13 +798,45 @@ class ReportLabPdfGenerator:
         elements: List[Any] = []
         elements.append(Paragraph("3. Scanner Coverage & Tool Diagnostics", self.styles["SectionHeading"]))
 
-        tools_data = [
-            ("SAST Vulnerability Engine", "COMPLETED", "AST/regex taint analysis on Python, JS, TS source code", "0.22s"),
-            ("Credential & Secret Scanner", "COMPLETED", "Entropy & pattern detection across 40+ key formats", "0.18s"),
-            ("Dependency Advisory Scanner", "COMPLETED", "OSV authoritative CVE matching on manifests", "0.31s"),
-            ("Open Source License Audit", "COMPLETED", "SPDX compliance validation on third-party libraries", "0.09s"),
-            ("Code Quality & Lint Engine", "COMPLETED", "Cyclomatic complexity and technical debt heuristics", "0.14s"),
-        ]
+        # Rows come from the coverage the scanners recorded for this scan. Nothing is
+        # assumed: if a tool was skipped, partial or failed, the table says so.
+        coverage: Dict[str, Any] = {}
+        raw_impact = getattr(commit_analysis, "impact_analysis", None)
+        if raw_impact:
+            try:
+                impact_obj = json.loads(raw_impact) if isinstance(raw_impact, str) else dict(raw_impact)
+                coverage = impact_obj.get("coverage") or {}
+            except Exception:
+                coverage = {}
+
+        tools_data = []
+        for tool in (coverage.get("tools") or {}).values():
+            if not isinstance(tool, dict):
+                continue
+            scope = f"{tool.get('category', 'scan')}: {tool.get('files_scanned', 0)} file(s) examined, {tool.get('findings_count', 0)} finding(s)"
+            if tool.get("error_message"):
+                scope += f". Note: {tool.get('error_message')}"
+            try:
+                duration = f"{float(tool.get('duration_seconds') or 0):.2f}s"
+            except (TypeError, ValueError):
+                duration = "n/a"
+            tools_data.append((str(tool.get("tool_name") or "Scanner"), str(tool.get("status") or "UNKNOWN"), scope, duration))
+
+        if not tools_data:
+            elements.append(Paragraph(
+                "Per-tool coverage was not recorded for this scan, so no scanner status is reported here.",
+                self.styles["TableText"],
+            ))
+            return elements
+
+        if coverage.get("overall_status") and coverage.get("overall_status") != "COMPLETED":
+            elements.append(Paragraph(
+                f"<font color='#b45309'><b>Coverage for this scan is {_escape(coverage.get('overall_status'))}.</b> "
+                "One or more tools did not complete, so the absence of findings is not proof of a clean result.</font>",
+                self.styles["TableText"],
+            ))
+
+        status_colors = {"COMPLETED": "#16a34a", "PARTIAL": "#b45309", "SKIPPED": "#64748b", "FAILED": "#dc2626"}
 
         cov_table_data = [
             [
@@ -816,10 +848,10 @@ class ReportLabPdfGenerator:
         ]
         for t_name, t_status, t_scope, t_dur in tools_data:
             cov_table_data.append([
-                Paragraph(t_name, self.styles["TableTextBold"]),
-                Paragraph(f"<font color='#16a34a'><b>{t_status}</b></font>", self.styles["TableTextBold"]),
-                Paragraph(t_scope, self.styles["TableText"]),
-                Paragraph(t_dur, self.styles["TableText"]),
+                Paragraph(_escape(t_name), self.styles["TableTextBold"]),
+                Paragraph(f"<font color='{status_colors.get(t_status, '#64748b')}'><b>{_escape(t_status)}</b></font>", self.styles["TableTextBold"]),
+                Paragraph(_escape(t_scope), self.styles["TableText"]),
+                Paragraph(_escape(t_dur), self.styles["TableText"]),
             ])
 
         cov_table = Table(cov_table_data, colWidths=[140, 75, width - 265, 50])

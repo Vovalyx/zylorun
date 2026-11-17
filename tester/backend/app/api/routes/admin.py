@@ -450,51 +450,31 @@ async def get_admin_user(
     request: Request,
     db: AsyncSession = Depends(get_db)
 ) -> dict:
-    """Verifies that the caller possesses valid administrator credentials."""
+    """Verifies the caller holds a valid session for a database user with the Admin role.
+
+    The role is always read from the database, never trusted from the token, and
+    there are no built-in usernames, passwords or special tokens.
+    """
     auth_header = request.headers.get("authorization", "")
     token = auth_header.removeprefix("Bearer ").strip() if auth_header.startswith("Bearer ") else ""
     if not token:
-        token = request.query_params.get("token", "")
-
-    if not token:
         raise HTTPException(status_code=401, detail="Administrator session required")
-
-    if token.startswith("vovalyx_admin_master_session_"):
-        return {"id": 1, "username": "admin", "email": "admin@vovalyx.in", "role": "Admin"}
 
     try:
         import jwt
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        username = payload.get("sub", "")
-        role = payload.get("role", "")
-        is_admin = payload.get("is_admin", False)
-
-        master_admins = (
-            "admin", "admin@vovalyx.in", "admin@zylorun.io", 
-            "varshith", "4mh24cs167", "4mh24cs167@gmail.com", 
-            "4mh24cs181", "4mh24cs181@gmail.com", 
-            "charan", "charansalanki8@gmail.com"
-        )
-        if username.lower() in master_admins or is_admin or role == "Admin":
-            return {"id": 1, "username": username, "email": "admin@vovalyx.in", "role": "Admin"}
-
-        result = await db.execute(
-            select(User).where(
-                or_(
-                    func.lower(User.username) == username.lower(),
-                    func.lower(User.email) == username.lower()
-                )
-            )
-        )
-        user = result.scalars().first()
-        if user and (user.role == "Admin" or user.email.lower() in master_admins):
-            return {"id": user.id, "username": user.username, "email": user.email, "role": "Admin"}
-
-        raise HTTPException(status_code=403, detail="Forbidden: Account lacks administrator privileges")
-    except HTTPException:
-        raise
+        username = str(payload.get("sub") or "")
+        if not username or payload.get("type") != "access":
+            raise ValueError("not an access token")
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid or expired administrator token")
+
+    user = (await db.execute(
+        select(User).where(func.lower(User.username) == username.lower(), User.is_active.is_(True))
+    )).scalars().first()
+    if not user or user.role != "Admin":
+        raise HTTPException(status_code=403, detail="Forbidden: Account lacks administrator privileges")
+    return {"id": user.id, "username": user.username, "email": user.email, "role": "Admin"}
 
 
 @router.post("/login")
@@ -502,66 +482,44 @@ async def admin_portal_login(
     payload: AdminLoginPayload,
     db: AsyncSession = Depends(get_db)
 ):
-    """Dedicated secure login gateway for the Admin Console."""
+    """Login gateway for the Admin Console. Only database users with the Admin role can sign in."""
+    from app.auth import throttle
+
     clean_user = payload.username.strip().lower()
-    clean_pass = payload.password.strip()
+    if not clean_user or not payload.password:
+        raise HTTPException(status_code=400, detail="Username and password are required.")
 
-    # 1. Master Admin Credentials Check
-    valid_master_users = (
-        "admin", "admin@vovalyx.in", "admin@zylorun.io", 
-        "varshith", "4mh24cs167", "4mh24cs167@gmail.com", 
-        "4mh24cs181", "4mh24cs181@gmail.com", 
-        "charan", "charansalanki8@gmail.com"
-    )
-    valid_master_passes = ("VovalyxAdmin2026!", "VovalyxAdmin2026", "admin", "admin123", "Admin@123")
-    if clean_user in valid_master_users and clean_pass in valid_master_passes:
-        expires = timedelta(hours=24)
-        uname = clean_user.split("@")[0] if "@" in clean_user else clean_user
-        uemail = clean_user if "@" in clean_user else f"{clean_user}@vovalyx.in"
-        token = create_access_token(
-            data={"sub": uname, "role": "Admin", "is_admin": True},
-            expires_delta=expires
-        )
-        return {
-            "access_token": token,
-            "token_type": "bearer",
-            "username": uname,
-            "role": "Admin",
-            "email": uemail
-        }
+    throttle.ensure_not_locked(f"admin:{clean_user}")
 
-    # 2. Database Users with Admin Role Check
-    result = await db.execute(
+    user = (await db.execute(
         select(User).where(
             or_(
                 func.lower(User.username) == clean_user,
                 func.lower(User.email) == clean_user
             )
         )
+    )).scalars().first()
+
+    if not user or not user.is_active or not verify_password(payload.password, user.hashed_password):
+        throttle.record_failure(f"admin:{clean_user}")
+        raise HTTPException(status_code=401, detail="Invalid administrator credentials.")
+
+    if user.role != "Admin":
+        throttle.record_failure(f"admin:{clean_user}")
+        raise HTTPException(status_code=403, detail="Access denied. Account is not an administrator.")
+
+    throttle.clear(f"admin:{clean_user}")
+    token = create_access_token(
+        data={"sub": user.username, "role": "Admin"},
+        expires_delta=timedelta(hours=12)
     )
-    user = result.scalars().first()
-    if user and verify_password(clean_pass, user.hashed_password):
-        if user.role != "Admin" and user.email.lower() in valid_master_users:
-            user.role = "Admin"
-            await db.commit()
-
-        if user.role == "Admin":
-            expires = timedelta(hours=24)
-            token = create_access_token(
-                data={"sub": user.username, "role": "Admin", "is_admin": True},
-                expires_delta=expires
-            )
-            return {
-                "access_token": token,
-                "token_type": "bearer",
-                "username": user.username,
-                "role": "Admin",
-                "email": user.email
-            }
-        else:
-            raise HTTPException(status_code=403, detail="Access denied. Account is not an administrator.")
-
-    raise HTTPException(status_code=401, detail="Invalid administrator credentials.")
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "username": user.username,
+        "role": "Admin",
+        "email": user.email
+    }
 
 
 _VISITOR_LOG_QUEUE = []
@@ -760,9 +718,14 @@ async def update_user_role(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
         
+    if user.id == current_user["id"] and target_role != "Admin":
+        raise HTTPException(status_code=400, detail="You cannot remove your own administrator role.")
+
     user.role = target_role
     await db.commit()
     await db.refresh(user)
+    from app.auth.deps import invalidate_user_cache
+    invalidate_user_cache()
     return {"status": "success", "user_id": user.id, "username": user.username, "role": user.role}
 
 

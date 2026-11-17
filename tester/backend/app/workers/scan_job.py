@@ -1,3 +1,4 @@
+import asyncio
 import json
 import shutil
 import subprocess
@@ -21,7 +22,7 @@ from app.database.models import (
 from app.database.session import AsyncSessionLocal
 from app.utils.github import git_environment
 from app.scanners.universal import UniversalScanner
-from app.scanners.models import is_test_or_benchmark_path
+from app.scanners.models import is_test_or_benchmark_path, finding_is_fixture
 from app.scoring.engine import calculate_risk_score
 from app.analysis.indexer import build_repository_index
 from app.analyzers.registry import run_analyzers
@@ -89,24 +90,24 @@ async def run_scan(scan_id: int, shared_repo_dir: str = None):
             if shared_repo_dir:
                 # Reuse the bare clone from the polling invocation. 
                 # This guarantees zero duplicate object fetches across B/C/D!
-                subprocess.run(["git", "-C", shared_repo_dir, "worktree", "add", "--detach", temp_dir, commit.hash], check=True, capture_output=True, text=True, timeout=settings.SCAN_TIMEOUT_SECONDS, env=env)
+                (await asyncio.to_thread(subprocess.run, ["git", "-C", shared_repo_dir, "worktree", "add", "--detach", temp_dir, commit.hash], check=True, capture_output=True, text=True, timeout=settings.SCAN_TIMEOUT_SECONDS, env=env))
             else:
                 # Do not use --depth: an older webhook commit must remain fetchable after
                 # newer commits reach the branch. --no-checkout prevents hooks/scripts.
-                subprocess.run(["git", "clone", "--no-checkout", repo.url, temp_dir], check=True, capture_output=True, text=True, timeout=settings.SCAN_TIMEOUT_SECONDS, env=env)
+                (await asyncio.to_thread(subprocess.run, ["git", "clone", "--no-checkout", repo.url, temp_dir], check=True, capture_output=True, text=True, timeout=settings.SCAN_TIMEOUT_SECONDS, env=env))
             
             oauth_token = None
             env.pop("GIT_CONFIG_VALUE_0", None)
             env.pop("GIT_CONFIG_COUNT", None)
             env.pop("GIT_CONFIG_KEY_0", None)
             if not shared_repo_dir:
-                subprocess.run(["git", "-C", temp_dir, "checkout", "--detach", commit.hash], check=True, capture_output=True, text=True, timeout=settings.SCAN_TIMEOUT_SECONDS, env=env)
+                (await asyncio.to_thread(subprocess.run, ["git", "-C", temp_dir, "checkout", "--detach", commit.hash], check=True, capture_output=True, text=True, timeout=settings.SCAN_TIMEOUT_SECONDS, env=env))
                 
-            checked_out = subprocess.run(["git", "-C", temp_dir, "rev-parse", "HEAD"], check=True, capture_output=True, text=True, timeout=10, env=env).stdout.strip().lower()
+            checked_out = (await asyncio.to_thread(subprocess.run, ["git", "-C", temp_dir, "rev-parse", "HEAD"], check=True, capture_output=True, text=True, timeout=10, env=env)).stdout.strip().lower()
             if checked_out != commit.hash: raise RuntimeError("checked out revision did not match requested SHA")
             
             # Fetch metadata
-            metadata_raw = subprocess.run(["git", "-C", temp_dir, "log", "-1", "--format=%s%n%an%n%ae%n%cI%n%P", commit.hash], check=True, capture_output=True, text=True, timeout=10, env=env).stdout.strip().split("\n")
+            metadata_raw = (await asyncio.to_thread(subprocess.run, ["git", "-C", temp_dir, "log", "-1", "--format=%s%n%an%n%ae%n%cI%n%P", commit.hash], check=True, capture_output=True, text=True, timeout=10, env=env)).stdout.strip().split("\n")
             if len(metadata_raw) >= 4:
                 commit.message = metadata_raw[0]
                 commit.author_name = metadata_raw[1]
@@ -120,16 +121,16 @@ async def run_scan(scan_id: int, shared_repo_dir: str = None):
             
             # 1. Standard Universal Scan with Coverage
             scanner_instance = UniversalScanner(temp_dir)
-            raw_findings = scanner_instance.scan()
+            raw_findings = await asyncio.to_thread(scanner_instance.scan)
             coverage_data = scanner_instance.get_coverage()
             
             # 2. Structural & Impact Analysis
             from app.analysis.impact import analyze_commit_changes, analyze_structural_changes, build_dependency_graph, analyze_impact
             from app.database.models import CommitAnalysis
             
-            changed_files_data = analyze_commit_changes(temp_dir, commit.hash)
-            structural_changes_data = analyze_structural_changes(temp_dir, commit.hash)
-            dep_graph = build_dependency_graph(temp_dir)
+            changed_files_data = await asyncio.to_thread(analyze_commit_changes, temp_dir, commit.hash)
+            structural_changes_data = await asyncio.to_thread(analyze_structural_changes, temp_dir, commit.hash)
+            dep_graph = await asyncio.to_thread(build_dependency_graph, temp_dir)
             changed_file_paths = [cf.get('file', '') for cf in changed_files_data if cf.get('status', '') in ('A', 'M', 'R') or cf.get('status', '').startswith('R')]
             impact_data = analyze_impact(changed_file_paths, dep_graph)
             impact_data["coverage"] = coverage_data
@@ -160,7 +161,7 @@ async def run_scan(scan_id: int, shared_repo_dir: str = None):
             # 2b. Comprehensive Repository Indexing for Project Hub
             index_data = None
             try:
-                index_dict = build_repository_index(temp_dir, commit.hash)
+                index_dict = await asyncio.to_thread(build_repository_index, temp_dir, commit.hash)
                 index_data = index_dict
                 existing_index = (await db.execute(
                     select(RepositoryIndex).where(
@@ -188,7 +189,8 @@ async def run_scan(scan_id: int, shared_repo_dir: str = None):
 
             # 2c. Execute continuous analyzers and persist analyzer runs
             try:
-                analyzer_results = run_analyzers(
+                analyzer_results = await asyncio.to_thread(
+                    run_analyzers,
                     repo_dir=temp_dir,
                     commit_sha=commit.hash,
                     index=index_data
@@ -244,11 +246,7 @@ async def run_scan(scan_id: int, shared_repo_dir: str = None):
             # Real security alerts for actionable production vulnerabilities only (exclude test fixtures)
             for finding in raw_findings:
                 f_path = finding.get("file_path") or finding.get("file")
-                is_test_finding = (
-                    finding.get("classification") == "Intentional test fixture or demonstration example"
-                    or is_test_or_benchmark_path(f_path)
-                    or "(Sample / Test Fixture)" in (finding.get("title") or "")
-                )
+                is_test_finding = finding_is_fixture(finding)
                 if not is_test_finding and finding.get("severity", "").upper() in ("CRITICAL", "HIGH"):
                     db.add(Notification(
                         user_id=repo.owner_id,
@@ -305,11 +303,7 @@ async def run_scan(scan_id: int, shared_repo_dir: str = None):
                     finding_status = "NEW"
 
                 f_path = finding.get("file_path") or finding.get("file") or "Repository"
-                is_fixture = (
-                    finding.get("classification") == "Intentional test fixture or demonstration example"
-                    or is_test_or_benchmark_path(f_path)
-                    or "(Sample / Test Fixture)" in (finding.get("title") or "")
-                )
+                is_fixture = finding_is_fixture(finding)
                 classification = (
                     "Intentional test fixture or demonstration example"
                     if is_fixture
@@ -393,8 +387,8 @@ async def run_scan(scan_id: int, shared_repo_dir: str = None):
         finally:
             if temp_dir:
                 if shared_repo_dir:
-                    subprocess.run(["git", "-C", shared_repo_dir, "worktree", "remove", "--force", temp_dir], check=False, capture_output=True)
-                shutil.rmtree(temp_dir, ignore_errors=True)
+                    (await asyncio.to_thread(subprocess.run, ["git", "-C", shared_repo_dir, "worktree", "remove", "--force", temp_dir], check=False, capture_output=True))
+                await asyncio.to_thread(shutil.rmtree, temp_dir, True)
         # Commit any pending clean state if scan exists
         final_scan_check = (await db.execute(select(Scan).where(Scan.id == scan_id))).scalars().first()
         if final_scan_check:

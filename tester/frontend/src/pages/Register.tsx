@@ -12,22 +12,38 @@ export default function Register() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
+    if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{2,31}$/.test(name.trim())) {
+      setError('Username must be 3-32 characters using letters, numbers, dot, dash or underscore.');
+      return;
+    }
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
     try {
       await apiClient.post(`/auth/register`, {
-        username: name,
+        username: name.trim(),
         email: email,
         password: password
       });
       
       const formData = new URLSearchParams();
-      formData.append('username', name);
+      formData.append('username', name.trim());
       formData.append('password', password);
       
       const loginRes = await apiClient.post(`/auth/login`, formData);
       localStorage.setItem('access_token', loginRes.data.access_token);
       navigate('/dashboard');
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Registration failed');
+      // Validation errors arrive as a list of objects; only ever render text.
+      const detail = err.response?.data?.detail;
+      const message = typeof detail === 'string'
+        ? detail
+        : Array.isArray(detail) && detail[0]?.msg
+          ? String(detail[0].msg)
+          : 'Registration failed. Check your details and try again.';
+      setError(message);
     }
   };
 
@@ -72,14 +88,17 @@ export default function Register() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1.5 text-slate-700 dark:text-slate-300">Name</label>
+            <label className="block text-sm font-medium mb-1.5 text-slate-700 dark:text-slate-300">Username</label>
             <input 
               type="text" 
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full px-3 py-2 rounded-lg border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark focus:outline-none focus:ring-2 focus:ring-brand-500/50 transition-shadow"
-              placeholder="Jane Doe"
+              placeholder="jane_doe"
+              minLength={3}
+              maxLength={32}
+              autoComplete="username"
             />
           </div>
           <div>
@@ -101,7 +120,9 @@ export default function Register() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full px-3 py-2 rounded-lg border border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark focus:outline-none focus:ring-2 focus:ring-brand-500/50 transition-shadow"
-              placeholder="••••••••"
+              placeholder="At least 8 characters"
+              minLength={8}
+              autoComplete="new-password"
             />
           </div>
           <button type="submit" className="w-full py-2.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-medium transition-colors mt-2 shadow-lg shadow-brand-500/25">

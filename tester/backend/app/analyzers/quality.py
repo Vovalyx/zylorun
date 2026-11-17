@@ -34,6 +34,8 @@ class CodeQualityAnalyzer(BaseAnalyzer):
                     continue
                 files_scanned += 1
                 full_p = os.path.join(root, fn)
+                if os.path.islink(full_p):
+                    continue  # never follow links out of the repository being scanned
                 rel_p = os.path.relpath(full_p, repo_dir).replace("\\", "/")
 
                 try:

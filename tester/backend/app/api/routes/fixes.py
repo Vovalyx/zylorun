@@ -22,7 +22,7 @@ import httpx
 from app.auth.security import decrypt_token
 from app.auth.deps import get_current_user
 from app.config import settings
-from app.database.models import Finding, Repository, User
+from app.database.models import Commit, Finding, Repository, Scan, User
 from app.database.session import get_db
 from app.scanners.secrets import scan_content_for_secrets
 from app.services.fix_agent import fix_agent
@@ -43,11 +43,39 @@ class CreateFixPRPayload(BaseModel):
     custom_branch: Optional[str] = None
 
 
+MAX_LIVE_SCAN_BYTES = 512 * 1024
+
+
+async def owned_repo_and_finding(repo_id: int, finding_id: int, current_user: User, db: AsyncSession):
+    """Loads a repository owned by the caller and a finding that belongs to that repository.
+
+    Both lookups are scoped, so guessing another user's repository or finding id
+    returns 404 instead of their data.
+    """
+    repo = (await db.execute(
+        select(Repository).where(Repository.id == repo_id, Repository.owner_id == current_user.id)
+    )).scalars().first()
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repository not found")
+
+    finding = (await db.execute(
+        select(Finding)
+        .join(Scan, Finding.scan_id == Scan.id)
+        .join(Commit, Scan.commit_id == Commit.id)
+        .where(Finding.id == finding_id, Commit.repository_id == repo.id)
+    )).scalars().first()
+    if not finding:
+        raise HTTPException(status_code=404, detail="Finding not found")
+    return repo, finding
+
+
 @router.post("/scanners/secrets/live-scan")
-async def live_secret_scan(payload: LiveSecretScanPayload):
+async def live_secret_scan(payload: LiveSecretScanPayload, current_user: User = Depends(get_current_user)):
     """Instant high-speed secret and credential leak scanner with entropy analysis and masking."""
     if not payload.content or not payload.content.strip():
         return {"total_secrets": 0, "findings": [], "status": "CLEAN"}
+    if len(payload.content) > MAX_LIVE_SCAN_BYTES:
+        raise HTTPException(status_code=413, detail="Content is too large to scan (limit 512 KB).")
 
     findings = scan_content_for_secrets(payload.content, payload.filename or "snippet.txt")
     has_critical = any(f.get("severity") == "Critical" for f in findings)
@@ -68,16 +96,8 @@ async def preview_ai_fix(
     current_user: User = Depends(get_current_user),
 ):
     """Generates an intelligent context-aware AI remediation patch with unified diff preview."""
-    # 1. Fetch Finding and Repository
-    f_res = await db.execute(select(Finding).where(Finding.id == finding_id))
-    finding = f_res.scalars().first()
-    if not finding:
-        raise HTTPException(status_code=404, detail="Finding not found")
-
-    r_res = await db.execute(select(Repository).where(Repository.id == repo_id))
-    repo = r_res.scalars().first()
-    if not repo:
-        raise HTTPException(status_code=404, detail="Repository not found")
+    # 1. Fetch the caller's repository and a finding that belongs to it
+    repo, finding = await owned_repo_and_finding(repo_id, finding_id, current_user, db)
 
     file_path = finding.file_path or ""
     line_no = finding.line_number or 1
@@ -165,16 +185,8 @@ async def create_remediation_pull_request(
     current_user: User = Depends(get_current_user),
 ):
     """Autonomously branches, patches the vulnerability, and opens a GitHub Pull Request."""
-    # 1. Fetch Finding and Repository
-    f_res = await db.execute(select(Finding).where(Finding.id == finding_id))
-    finding = f_res.scalars().first()
-    if not finding:
-        raise HTTPException(status_code=404, detail="Finding not found")
-
-    r_res = await db.execute(select(Repository).where(Repository.id == repo_id))
-    repo = r_res.scalars().first()
-    if not repo:
-        raise HTTPException(status_code=404, detail="Repository not found")
+    # 1. Fetch the caller's repository and a finding that belongs to it
+    repo, finding = await owned_repo_and_finding(repo_id, finding_id, current_user, db)
 
     oauth_token = decrypt_token(current_user.github_access_token or "")
     if not oauth_token:

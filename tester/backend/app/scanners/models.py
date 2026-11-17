@@ -97,10 +97,13 @@ def is_test_or_benchmark_path(file_path: Optional[str]) -> bool:
     test_dirs = {
         "tests", "test", "testing", "benchmark", "benchmarks", "benches", "bench",
         "fixtures", "fixture", "mocks", "mock", "spec", "specs",
-        "testdata", "test-fixtures", "test_fixtures", "samples", "sample",
-        "examples", "example", "__tests__", "__test__", "__mocks__",
-        "e2e", "cypress", "playwright", "features", "unittests", "unittest"
+        "testdata", "test-fixtures", "test_fixtures",
+        "__tests__", "__test__", "__mocks__",
+        "e2e", "cypress", "playwright", "unittests", "unittest"
     }
+    # Deliberately NOT listed: "examples", "samples", "features" and similar names.
+    # Those folders routinely hold code that is shipped and executed, so a finding
+    # there must count like any other.
     for d in dirs:
         if d in test_dirs:
             return True
@@ -148,3 +151,27 @@ def is_test_or_benchmark_path(file_path: Optional[str]) -> bool:
     return False
 
 
+FIXTURE_CLASSIFICATION = "Intentional test fixture or demonstration example"
+
+
+def finding_is_fixture(finding: dict) -> bool:
+    """Decides whether a finding may be treated as a non-scoring test fixture.
+
+    A secret is never excused because of where the file lives: a real credential
+    committed under tests/ is still a leaked credential. Secrets are excused only
+    when the scanner recognised the value itself as a documented placeholder.
+    Other finding types are excused when the scanner classified them as fixtures
+    or the file is inside a genuine test directory.
+    """
+    title = finding.get("title") or ""
+    if (
+        finding.get("classification") == FIXTURE_CLASSIFICATION
+        or finding.get("is_test_fixture") is True
+        or "(Test Fixture)" in title
+        or "(Sample / Test Fixture)" in title
+    ):
+        return True
+    category = str(finding.get("category") or finding.get("type") or "").lower()
+    if category in ("secret", "secrets"):
+        return False
+    return is_test_or_benchmark_path(finding.get("file_path") or finding.get("file"))

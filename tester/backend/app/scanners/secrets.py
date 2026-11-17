@@ -153,7 +153,7 @@ def run_secret_scan(repo_path: str, fingerprint_generator) -> Tuple[List[Finding
                     secret_val = item.get("Secret", "")
                     redacted = redact_secret(secret_val) if secret_val else "****"
                     is_test_file = is_test_or_benchmark_path(file_path)
-                    is_sample = is_sample_or_placeholder_credential(secret_val) or is_test_file
+                    is_sample = is_sample_or_placeholder_credential(secret_val)
                     classification = (
                         "Intentional test fixture or demonstration example"
                         if is_sample
@@ -187,6 +187,8 @@ def run_secret_scan(repo_path: str, fingerprint_generator) -> Tuple[List[Finding
         dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
         for f in files:
             full_path = os.path.join(root, f)
+            if os.path.islink(full_path):
+                continue  # never follow links out of the repository being scanned
             rel_path = os.path.relpath(full_path, repo_path).replace("\\", "/")
             try:
                 if os.path.getsize(full_path) > MAX_FILE_BYTES:
@@ -212,7 +214,7 @@ def run_secret_scan(repo_path: str, fingerprint_generator) -> Tuple[List[Finding
                                     continue
 
                                 is_test_file = is_test_or_benchmark_path(rel_path)
-                                is_sample = is_sample_or_placeholder_credential(raw_secret) or is_test_file
+                                is_sample = is_sample_or_placeholder_credential(raw_secret)
                                 classification = (
                                     "Intentional test fixture or demonstration example"
                                     if is_sample

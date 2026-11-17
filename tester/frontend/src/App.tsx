@@ -8,6 +8,7 @@ import { apiClient } from './config'; // Ensures axios interceptor is loaded
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import ResetPassword from './pages/ResetPassword';
 
 // Lazy-loaded heavy application & admin views for optimal initial page-load speed & minimal bundle weight
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -106,7 +107,9 @@ function TokenExtractor() {
   const location = useLocation();
   useEffect(() => {
     const hash = window.location.hash;
-    if (hash.includes('token=')) {
+    // The OAuth callback redirects to /dashboard#token=...; a token on any other
+    // page is ignored so a crafted link cannot sign a visitor into someone else's account.
+    if (window.location.pathname === '/dashboard' && hash.includes('token=')) {
       const params = new URLSearchParams(hash.substring(1));
       const token = params.get('token');
       if (token) {
@@ -150,6 +153,7 @@ function App() {
               <Route path="/" element={<Landing />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/contact" element={<Contact />} />
               <Route path="/contact-us" element={<Contact />} />
               <Route path="/privacy" element={<PrivacyPolicy />} />

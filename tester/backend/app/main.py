@@ -36,54 +36,69 @@ def run_migrations():
     alembic_cfg.set_main_option("script_location", os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic"))
     command.upgrade(alembic_cfg, "head")
 
-def ensure_schema_and_columns():
-    from app.database.session import sync_engine, Base, SessionLocal
-    from sqlalchemy import text
+DISABLED_PASSWORD_HASH = "!disabled"
+MIN_ADMIN_PASSWORD_LENGTH = 12
+
+def ensure_bootstrap_admin():
+    """Creates or updates the bootstrap administrator from environment variables.
+
+    ADMIN_PASSWORD is the only source of this account's password. When it is not
+    set (or too short) the account cannot sign in at all, so a database that was
+    seeded by an older build with a publicly known password is locked on startup.
+    """
+    from sqlalchemy import func
+    from app.config import settings
+    from app.database.session import SessionLocal
     from app.database.models import User
-    from app.auth.security import get_password_hash
+    from app.auth.security import get_password_hash, verify_password
+
+    username = (settings.ADMIN_USERNAME or "admin").strip()
+    email = (settings.ADMIN_EMAIL or "").strip().lower()
+    password = settings.ADMIN_PASSWORD or ""
+
+    db = SessionLocal()
     try:
-        Base.metadata.create_all(bind=sync_engine)
-        with sync_engine.begin() as conn:
-            is_pg = sync_engine.dialect.name == "postgresql"
-            if is_pg:
-                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP;"))
-                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP;"))
-                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR DEFAULT 'User';"))
-            else:
-                cols = [r[1] for r in conn.execute(text("PRAGMA table_info(users)")).fetchall()]
-                if "created_at" not in cols:
-                    conn.execute(text("ALTER TABLE users ADD COLUMN created_at TIMESTAMP;"))
-                if "last_login_at" not in cols:
-                    conn.execute(text("ALTER TABLE users ADD COLUMN last_login_at TIMESTAMP;"))
-                if "role" not in cols:
-                    conn.execute(text("ALTER TABLE users ADD COLUMN role VARCHAR DEFAULT 'User';"))
+        admin_u = db.query(User).filter(func.lower(User.username) == username.lower()).first()
 
-        # Verify or seed dedicated Admin account
-        db = SessionLocal()
-        try:
-            admin_u = db.query(User).filter((User.username == "admin") | (User.email == "admin@vovalyx.in")).first()
-            if not admin_u:
-                admin_u = User(
-                    username="admin",
-                    email="admin@vovalyx.in",
-                    hashed_password=get_password_hash("VovalyxAdmin2026!"),
-                    role="Admin",
-                    is_active=True
-                )
-                db.add(admin_u)
+        if len(password) < MIN_ADMIN_PASSWORD_LENGTH:
+            if admin_u and admin_u.hashed_password != DISABLED_PASSWORD_HASH:
+                admin_u.hashed_password = DISABLED_PASSWORD_HASH
                 db.commit()
-            else:
-                admin_u.role = "Admin"
-                admin_u.hashed_password = get_password_hash("VovalyxAdmin2026!")
-                db.commit()
-        except Exception:
-            db.rollback()
-        finally:
-            db.close()
+            logger.warning(
+                "ADMIN_PASSWORD is not set (minimum %s characters). The '%s' administrator account is disabled until it is.",
+                MIN_ADMIN_PASSWORD_LENGTH, username,
+            )
+            return
 
-        logger.info("Successfully verified schema and admin account.")
-    except Exception as e:
-        logger.warning("ensure_schema_and_columns note: %s", e)
+        if not admin_u:
+            admin_email = email or f"{username.lower()}@zylorun.local"
+            if db.query(User).filter(func.lower(User.email) == admin_email).first():
+                logger.error("Cannot create administrator '%s': ADMIN_EMAIL is already used by another account.", username)
+                return
+            db.add(User(
+                username=username,
+                email=admin_email,
+                hashed_password=get_password_hash(password),
+                role="Admin",
+                is_active=True,
+            ))
+            db.commit()
+            return
+
+        changed = False
+        if admin_u.role != "Admin":
+            admin_u.role = "Admin"; changed = True
+        if not admin_u.is_active:
+            admin_u.is_active = True; changed = True
+        if not verify_password(password, admin_u.hashed_password):
+            admin_u.hashed_password = get_password_hash(password); changed = True
+        if changed:
+            db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.error("Could not prepare the administrator account: %s", exc.__class__.__name__)
+    finally:
+        db.close()
 
 async def background_repo_poller():
     """Continuously polls active repositories for new commits in the background.
@@ -123,16 +138,15 @@ async def background_visitor_flush():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
+        # A failed migration must stop the application: running on a half-migrated
+        # schema hides the problem and corrupts data later.
+        await asyncio.wait_for(asyncio.to_thread(run_migrations), timeout=120.0)
+        logger.info("Successfully ran database migrations.")
+
         try:
-            await asyncio.wait_for(asyncio.to_thread(run_migrations), timeout=12.0)
-            logger.info("Successfully ran database migrations.")
-        except Exception as mig_err:
-            logger.warning("Database migrations skipped or encountered note: %s. Ensuring schema via Base.metadata...", mig_err)
-        
-        try:
-            await asyncio.wait_for(asyncio.to_thread(ensure_schema_and_columns), timeout=12.0)
-        except Exception as schema_err:
-            logger.warning("Schema preparation note: %s", schema_err)
+            await asyncio.wait_for(asyncio.to_thread(ensure_bootstrap_admin), timeout=30.0)
+        except Exception as admin_err:
+            logger.error("Administrator bootstrap did not complete: %s", admin_err.__class__.__name__)
 
         try:
             from app.database.session import SessionLocal
@@ -183,18 +197,6 @@ async def lifespan(app: FastAPI):
                         for c in defaults:
                             db.add(c)
                         db.commit()
-
-                    from app.database.models import User
-                    from app.auth.security import get_password_hash
-                    if db.query(User).count() == 0:
-                        admin_user = User(
-                            username="admin",
-                            email="admin@zylorun.io",
-                            hashed_password=get_password_hash("admin123"),
-                            is_active=True
-                        )
-                        db.add(admin_user)
-                        db.commit()
                 except Exception as exc:
                     logger.warning("Could not seed default configs/users: %s", exc)
                 finally:
@@ -239,14 +241,20 @@ if settings.FRONTEND_URL and settings.FRONTEND_URL != "*":
         if origin and origin not in cors_origins:
             cors_origins.append(origin)
 
+from app.config import is_production
+
+# Only explicitly listed origins are trusted. LAN addresses are accepted in
+# development so phones on the same network can reach a local dev server.
+_DEV_LAN_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+)(?::\d+)?$"
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+)(?::\d+)?$|^https://.*\.vercel\.app$|^https://.*\.onrender\.com$",
+    allow_origin_regex=None if is_production(settings) else _DEV_LAN_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["*"],
+    expose_headers=["Content-Disposition"],
 )
 
 import time
@@ -257,20 +265,42 @@ from fastapi.middleware.gzip import GZipMiddleware
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 _RATE_LIMIT_BUCKETS = defaultdict(list)
-_RATE_LIMIT_MAX_AUTH = 60  # max 60 requests per minute per IP on auth routes
+_RATE_LIMIT_MAX_AUTH = 120  # per address per minute; brute force is stopped by the per-account lockout
 _RATE_LIMIT_WINDOW = 60.0
 _LAST_ERROR_LOG_TIME = 0.0
 
+_RATE_LIMITED_PATHS = {
+    "/auth/login", "/auth/register", "/auth/forgot-password", "/auth/reset-password",
+    "/admin/login", "/contact", "/api/v1/contact",
+}
+_RATE_LIMIT_MAX_KEYS = 50000
+
+
+def client_address(request: Request) -> str:
+    """Best-effort client address for rate limiting.
+
+    The left-most X-Forwarded-For entry is supplied by the caller and can be
+    forged, so the right-most entry (appended by our own reverse proxy) is used.
+    Per-account lockout in app.auth.throttle does not depend on this value.
+    """
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        parts = [p.strip() for p in forwarded.split(",") if p.strip()]
+        if parts:
+            return parts[-1]
+    return request.client.host if request.client else "unknown"
+
+
 @app.middleware("http")
 async def rate_limiting_middleware(request: Request, call_next):
-    path = request.url.path
-    if path in ("/auth/login", "/auth/register", "/auth/admin-login"):
-        client_ip = request.client.host if request.client else "unknown"
-        forwarded = request.headers.get("x-forwarded-for")
-        if forwarded:
-            client_ip = forwarded.split(",")[0].strip()
+    path = request.url.path.rstrip("/") or "/"
+    if request.method == "POST" and path in _RATE_LIMITED_PATHS:
+        client_ip = client_address(request)
 
         now = time.time()
+        if len(_RATE_LIMIT_BUCKETS) > _RATE_LIMIT_MAX_KEYS:
+            for key in [k for k, stamps in list(_RATE_LIMIT_BUCKETS.items()) if not stamps or stamps[-1] <= now - _RATE_LIMIT_WINDOW]:
+                _RATE_LIMIT_BUCKETS.pop(key, None)
         timestamps = [t for t in _RATE_LIMIT_BUCKETS[client_ip] if t > now - _RATE_LIMIT_WINDOW]
         if len(timestamps) >= _RATE_LIMIT_MAX_AUTH:
             return JSONResponse(

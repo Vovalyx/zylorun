@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Terminal, Play, Square, Activity, Shield, Download, RefreshCw, Clock, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
-import { apiClient } from '../config';
+import { apiClient, API_URL } from '../config';
 
 interface CommandItem {
   id: number;
@@ -92,10 +92,10 @@ export default function LiveRunner() {
     setElapsed(0);
 
     const token = localStorage.getItem('access_token') || '';
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    // Fallback to localhost:8000 if running in vite dev
-    const host = window.location.port === '5173' ? 'localhost:8000' : window.location.host;
-    const wsUrl = `${protocol}//${host}/runs/ws/${selectedCmd}/${selectedTarget}?token=${token}`;
+    // The API lives on a different host than the web app in production, so the
+    // socket address is derived from the API base URL. The token is sent in the
+    // first message, never in the URL (URLs end up in logs and browser history).
+    const wsUrl = `${API_URL.replace(/^http/i, 'ws')}/runs/ws/${selectedCmd}/${selectedTarget}`;
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
@@ -110,7 +110,7 @@ export default function LiveRunner() {
           args = [];
         }
       }
-      ws.send(JSON.stringify({ args }));
+      ws.send(JSON.stringify({ token, args }));
     };
 
     ws.onmessage = (event) => {

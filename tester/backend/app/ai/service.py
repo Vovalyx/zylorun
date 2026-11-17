@@ -143,7 +143,7 @@ class AIService:
             return DisabledProvider("AI explicitly disabled via AI_PROVIDER=disabled")
 
         # Autodetect from keys
-        if os.getenv("GEMINI_API_KEY") or GeminiProvider.get_default_key():
+        if os.getenv("GEMINI_API_KEY"):
             return GeminiProvider(timeout=self.timeout_seconds)
         elif os.getenv("OPENAI_API_KEY"):
             return OpenAIProvider(timeout=self.timeout_seconds)
@@ -271,7 +271,7 @@ class AIService:
             }
 
         if provider_name == "gemini":
-            key_present = bool(os.getenv("GEMINI_API_KEY", "").strip() or GeminiProvider.get_default_key())
+            key_present = bool(os.getenv("GEMINI_API_KEY", "").strip())
             model = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest").strip()
             return {
                 "configured": key_present,
@@ -285,7 +285,7 @@ class AIService:
             }
 
         # 4. Autodetect from keys
-        if os.getenv("GEMINI_API_KEY", "").strip() or GeminiProvider.get_default_key():
+        if os.getenv("GEMINI_API_KEY", "").strip():
             model = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest").strip()
             return {
                 "configured": True,

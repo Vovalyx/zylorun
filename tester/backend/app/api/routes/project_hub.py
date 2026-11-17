@@ -1019,9 +1019,13 @@ async def generate_finding_fix(
 ):
     repo = await owned_repository(repository_id, current_user, db)
 
+    # The finding must belong to this repository, not merely exist.
     finding = (
         await db.execute(
-            select(Finding).where(Finding.id == finding_id)
+            select(Finding)
+            .join(Scan, Finding.scan_id == Scan.id)
+            .join(Commit, Scan.commit_id == Commit.id)
+            .where(Finding.id == finding_id, Commit.repository_id == repo.id)
         )
     ).scalars().first()
     if not finding:

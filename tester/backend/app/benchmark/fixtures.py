@@ -460,13 +460,18 @@ BENCHMARK_FIXTURES: List[BenchmarkFixture] = [
     ),
     BenchmarkFixture(
         fixture_id="SAFE-DEP-CERTIFI-001",
-        name="Safe Dependency Package: certifi 2024.8.30 (Zero Active Advisories)",
+        name="Fixed-Version Control Case: certifi 2024.8.30 (GHSA-xqr8-7jwr-rhp7 Fixed Release)",
         category="Clean Code",
         file_path="requirements.txt",
         content="certifi==2024.8.30\n",
         expected_findings_count=0,
+        expected_rule_id="DEP-GHSA-xqr8-7jwr-rhp7",
         is_vulnerable=False,
-        uncertainty_notes="certifi 2024.8.30 has 0 active advisories in OSV database."
+        uncertainty_notes=(
+            "Live advisory data changes over time, so no pinned release stays advisory-free forever. "
+            "This control asserts a stable fact instead: certifi 2024.8.30 is past the 2023.7.22 fix "
+            "and must NOT receive DEP-GHSA-xqr8-7jwr-rhp7."
+        )
     ),
     BenchmarkFixture(
         fixture_id="SCOPED-NPM-001",

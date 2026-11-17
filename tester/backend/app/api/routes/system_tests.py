@@ -1,7 +1,14 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
+from app.auth.deps import get_current_user
 from app.services.system_tests import SystemTestService
 
-router = APIRouter(prefix="/system-tests", tags=["System Assurance Tests"])
+# Every route needs a signed-in user: the results describe the server's
+# environment, dependencies and configuration.
+router = APIRouter(
+    prefix="/system-tests",
+    tags=["System Assurance Tests"],
+    dependencies=[Depends(get_current_user)],
+)
 
 @router.get("/run-all")
 def run_all_system_tests():
@@ -33,5 +40,7 @@ def run_category_test(category_id: str):
         "privacy": SystemTestService.run_data_privacy_tests,
         "ai_safety": SystemTestService.run_ai_safety_tests,
     }
-    runner = mapping.get(category_id, SystemTestService.run_security_tests)
+    runner = mapping.get(category_id)
+    if not runner:
+        raise HTTPException(status_code=404, detail="Unknown test category")
     return runner()

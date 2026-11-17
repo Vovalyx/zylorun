@@ -15,6 +15,8 @@ def run_quality_scan(repo_path: str, fingerprint_generator) -> Tuple[List[Findin
         dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
         for f in files:
             full_path = os.path.join(root, f)
+            if os.path.islink(full_path):
+                continue  # never follow links out of the repository being scanned
             rel_path = os.path.relpath(full_path, repo_path).replace("\\", "/")
             if not os.path.isfile(full_path):
                 continue

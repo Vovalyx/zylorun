@@ -25,12 +25,11 @@
 | **ZyloRun Web App** | **Vercel** | **[https://zylorun-five.vercel.app/](https://zylorun-five.vercel.app/)** | 🟢 Operational |
 | **ZyloRun REST API** | **Render** | **[https://zylorun.onrender.com/](https://zylorun.onrender.com/)** | 🟢 Healthy (`v2.1.0`) |
 | **Swagger API Docs** | **Render** | **[https://zylorun.onrender.com/docs](https://zylorun.onrender.com/docs)** | 🟢 Interactive OpenAPI |
-| **System Assurance** | **Vercel** | **[https://zylorun-five.vercel.app/assurance](https://zylorun-five.vercel.app/assurance)** | 🟢 35/35 Operational |
+| **System Assurance** | **Vercel** | **[https://zylorun-five.vercel.app/assurance](https://zylorun-five.vercel.app/assurance)** | Live results on the page |
 
-> **Default Demo Login:**
-> - **Email / Username:** `4mh24cs167@gmail.com`
-> - **Password:** `password123`
-> *(Any unrecognized credentials typed into the sign-in screen are automatically provisioned via instant on-the-fly onboarding!)*
+> **Signing in:** create an account on the Register page. There is no shared demo
+> login and no account is created automatically from the sign-in screen.
+> The administrator account is configured with the `ADMIN_PASSWORD` environment variable.
 
 ---
 
@@ -89,12 +88,34 @@ Zero mock placeholders. ZyloRun dynamically scans your authentic dependency mani
 
 ---
 
-## 🛡️ Master-Grade System Assurance Suite (35 Checks / 15 Categories)
+## 🛡️ System Assurance Suite (35 Checks / 15 Categories)
 
-Accessible live at [`/assurance`](https://zylorun-five.vercel.app/assurance):
+Accessible live at [`/assurance`](https://zylorun-five.vercel.app/assurance) after signing in.
 
-| # | Category | Tests Implemented | Verified Production Metric | Status |
-|:---:|---|---|---|:---:|
+Every check runs against the live deployment each time the page is opened and reports
+what it measured: **passed**, **warning**, **failed**, or **not measured** (for checks that
+cannot be performed from inside the API server, such as a browser Lighthouse audit).
+Results are never fixed in advance, so this README does not list them.
+
+| # | Category | What is actually checked |
+|:---:|---|---|
+| **1** | **Code Security** | Built-in pattern scanner over the backend, project licence file, Python syntax of every module |
+| **2** | **Environment** | Required settings, Python version, API port |
+| **3** | **Performance** | Disk write/read speed, threads and memory, temp workspace read/write |
+| **4** | **Database** | Health query latency, schema revision equals the latest migration |
+| **5** | **Frontend** | Local files referenced by `index.html` exist (Lighthouse: not measured) |
+| **6** | **DAST** | Injection payloads against input validators, routes without login, installed vs pinned packages |
+| **7** | **Secrets & Crypto** | Token lifetime, bcrypt round trip and cost, encryption key validity |
+| **8** | **Network** | DNS and TCP to GitHub, outbound URL filter blocks internal addresses |
+| **9** | **Supply Chain** | Dependency names vs popular packages, CycloneDX SBOM generation |
+| **10** | **Concurrency** | 60 concurrent database queries, table count timings |
+| **11** | **Resilience** | Killed subprocess is reaped, silent peer read times out |
+| **12** | **Container** | Dockerfile base image tag, non-root user and healthcheck |
+| **13** | **Cloud Posture** | Deployment manifests contain no inline credentials, metadata address blocked |
+| **14** | **Data Privacy** | Sensitive literals in source, policy pages and account deletion endpoint |
+| **15** | **AI Safety** | Secrets scrubbed from prompts, patch syntax validator, rules mapped to CWE |
+
+---:|---|---|---|:---:|
 | **1** | **Code Security (SAST)** | Static SAST, License Compliance, Dead Code AST | 13 Active Rules, MIT/Apache Compliant | **PASSED 🟢** |
 | **2** | **Environment & Health** | Env Validator, Runtime Checker, Port Health | Python 3.14 64-bit, Ports Bound Cleanly | **PASSED 🟢** |
 | **3** | **Performance & Stress** | Disk I/O Benchmark, Process Memory, Permissions | 350+ MB/s Write, Optimal Thread Pool | **PASSED 🟢** |
@@ -123,7 +144,7 @@ analysis testing/
 │   ├── backend/                               # FastAPI Autonomous Security Engine
 │   │   ├── app/
 │   │   │   ├── api/routes/                    # Auth, Repositories, ProjectHub, SystemTests, Reports
-│   │   │   ├── auth/                          # JWT Bearer, auto-provisioning, password hashing
+│   │   │   ├── auth/                          # JWT Bearer, login throttling, password hashing
 │   │   │   ├── database/                      # SQLAlchemy 2.0 models, session, migrations
 │   │   │   ├── scanners/                      # SAST, Secrets, Dependencies, Licenses, Quality
 │   │   │   ├── services/                      # SystemTestService, dynamic SBOM generator, PDF reporter
@@ -180,7 +201,7 @@ Open `http://localhost:5173` in your browser.
 
 ## 🧪 Automated End-to-End Test Suite
 
-Run the full automated test suite to verify all 35 tests, live endpoints, and button interactions:
+Run the end-to-end scripts against a running local server (they register their own test users):
 
 ```powershell
 cd "tester\backend"

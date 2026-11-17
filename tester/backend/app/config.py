@@ -3,16 +3,22 @@ from dotenv import load_dotenv
 load_dotenv()
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Placeholder values that must never be used to sign or encrypt anything.
+INSECURE_SECRET_KEYS = {"", "your-super-secret-key"}
+INSECURE_WEBHOOK_SECRETS = {"", "super-secret-webhook-key"}
+INSECURE_ENCRYPTION_KEYS = {"", "uE2N2wF5bCq-H6sVlqQhM5mZl3fA7xP4V2bJ0rA1h10="}
+
+
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Zylorun"
     DATABASE_URL: str = os.getenv(
-        "DATABASE_URL", 
+        "DATABASE_URL",
         "sqlite+aiosqlite:///./risk_passport.db"
     )
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "your-super-secret-key")
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "")
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
-    GITHUB_WEBHOOK_SECRET: str = os.getenv("GITHUB_WEBHOOK_SECRET", "super-secret-webhook-key")
+    GITHUB_WEBHOOK_SECRET: str = os.getenv("GITHUB_WEBHOOK_SECRET", "")
     GITHUB_CLIENT_ID: str = os.getenv("GITHUB_CLIENT_ID", "")
     GITHUB_CLIENT_SECRET: str = os.getenv("GITHUB_CLIENT_SECRET", "")
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:5173")
@@ -23,40 +29,116 @@ class Settings(BaseSettings):
     MAX_COMMITS_PER_POLL: int = int(os.getenv("MAX_COMMITS_PER_POLL", "10"))
     MAX_POLLING_RUNTIME_SECONDS: int = int(os.getenv("MAX_POLLING_RUNTIME_SECONDS", "240"))
     MAX_CONCURRENT_SCANS: int = int(os.getenv("MAX_CONCURRENT_SCANS", "2"))
-    GITHUB_TOKEN_ENCRYPTION_KEY: str = os.getenv("GITHUB_TOKEN_ENCRYPTION_KEY", "uE2N2wF5bCq-H6sVlqQhM5mZl3fA7xP4V2bJ0rA1h10=")
+    GITHUB_TOKEN_ENCRYPTION_KEY: str = os.getenv("GITHUB_TOKEN_ENCRYPTION_KEY", "")
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest")
     AI_PROVIDER: str = os.getenv("AI_PROVIDER", "gemini")
+
+    # Bootstrap administrator. The password is never stored in source code:
+    # it is read from the environment and the account is disabled when it is unset.
+    ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "admin")
+    ADMIN_EMAIL: str = os.getenv("ADMIN_EMAIL", "")
+    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "")
+
+    # Password reset e-mail delivery (optional). Without SMTP no reset link can be sent.
+    PASSWORD_RESET_TOKEN_MINUTES: int = int(os.getenv("PASSWORD_RESET_TOKEN_MINUTES", "30"))
+    SMTP_HOST: str = os.getenv("SMTP_HOST", "")
+    SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
+    SMTP_USERNAME: str = os.getenv("SMTP_USERNAME", "")
+    SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")
+    SMTP_FROM: str = os.getenv("SMTP_FROM", "")
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 settings = Settings()
 
+import json
 import logging
 import secrets
 import base64
 
 logger = logging.getLogger(__name__)
 
-def validate_security_settings(config: Settings) -> None:
-    """Ensure production safety, auto-generating strong secrets if not explicitly configured in environment."""
-    is_production = config.ENVIRONMENT.strip().lower() in {"production", "prod"}
+_DEV_SECRETS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".dev_secrets.json")
 
-    PERSISTENT_DEFAULT_SECRET = "zylorun_sec_k9_f823bc91_vovalyx_auth_token_key_2026_prod"
-    if not config.SECRET_KEY or config.SECRET_KEY == "your-super-secret-key":
-        config.SECRET_KEY = os.getenv("SECRET_KEY", PERSISTENT_DEFAULT_SECRET)
 
-    if not config.GITHUB_WEBHOOK_SECRET or config.GITHUB_WEBHOOK_SECRET == "super-secret-webhook-key":
-        config.GITHUB_WEBHOOK_SECRET = secrets.token_hex(24)
-        if is_production:
-            logger.warning("GITHUB_WEBHOOK_SECRET was not set in environment; auto-generated secure secret.")
+def is_production(config) -> bool:
+    return str(getattr(config, "ENVIRONMENT", "")).strip().lower() in {"production", "prod"}
 
-    if not config.CRON_SECRET:
-        config.CRON_SECRET = secrets.token_hex(24)
 
-    if not config.GITHUB_TOKEN_ENCRYPTION_KEY or config.GITHUB_TOKEN_ENCRYPTION_KEY == "uE2N2wF5bCq-H6sVlqQhM5mZl3fA7xP4V2bJ0rA1h10=":
-        config.GITHUB_TOKEN_ENCRYPTION_KEY = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()
-        if is_production:
-            logger.warning("GITHUB_TOKEN_ENCRYPTION_KEY was not set in environment; auto-generated secure key.")
+def _load_dev_secrets() -> dict:
+    try:
+        with open(_DEV_SECRETS_FILE, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+            return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _save_dev_secrets(data: dict) -> None:
+    try:
+        with open(_DEV_SECRETS_FILE, "w", encoding="utf-8") as fh:
+            json.dump(data, fh)
+    except Exception:
+        # Read-only filesystem: the generated values simply live for this process only.
+        pass
+
+
+def validate_security_settings(config) -> None:
+    """Refuse to start in production with missing or placeholder secrets.
+
+    In development, random secrets are generated once and kept in a local,
+    git-ignored file so sessions survive a server reload. No secret value is
+    ever taken from source code.
+    """
+    missing = []
+    if (config.SECRET_KEY or "") in INSECURE_SECRET_KEYS:
+        missing.append("SECRET_KEY")
+    if (config.GITHUB_WEBHOOK_SECRET or "") in INSECURE_WEBHOOK_SECRETS:
+        missing.append("GITHUB_WEBHOOK_SECRET")
+    if (config.GITHUB_TOKEN_ENCRYPTION_KEY or "") in INSECURE_ENCRYPTION_KEYS:
+        missing.append("GITHUB_TOKEN_ENCRYPTION_KEY")
+    if not (config.CRON_SECRET or ""):
+        missing.append("CRON_SECRET")
+
+    if is_production(config):
+        if missing:
+            raise RuntimeError(
+                "Refusing to start in production: set strong, unique values for "
+                + ", ".join(missing)
+                + " (CRON_SECRET is read from ZYLORUN_CRON_SECRET)."
+            )
+        origins = [o.strip() for o in str(config.FRONTEND_URL or "").split(",") if o.strip()]
+        if not origins or any(not o.lower().startswith("https://") for o in origins):
+            raise RuntimeError(
+                "Refusing to start in production: set FRONTEND_URL to use HTTPS origins "
+                "(comma separated, no wildcard)."
+            )
+        return
+
+    if not missing:
+        return
+
+    stored = _load_dev_secrets()
+    generators = {
+        "SECRET_KEY": lambda: secrets.token_urlsafe(48),
+        "GITHUB_WEBHOOK_SECRET": lambda: secrets.token_hex(24),
+        "GITHUB_TOKEN_ENCRYPTION_KEY": lambda: base64.urlsafe_b64encode(secrets.token_bytes(32)).decode(),
+        "CRON_SECRET": lambda: secrets.token_hex(24),
+    }
+    changed = False
+    for name in missing:
+        value = stored.get(name)
+        if not value:
+            value = generators[name]()
+            stored[name] = value
+            changed = True
+        setattr(config, name, value)
+    if changed:
+        _save_dev_secrets(stored)
+    logger.warning(
+        "Development mode: generated local secrets for %s. Set them in the environment before deploying.",
+        ", ".join(missing),
+    )
 
 validate_security_settings(settings)

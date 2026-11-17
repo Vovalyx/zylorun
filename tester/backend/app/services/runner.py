@@ -14,26 +14,69 @@ HOST_REGEX = re.compile(
     r'^(?:(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}|(?:\d{1,3}\.){3}\d{1,3}|\[?[0-9a-fA-F:]+\]?|localhost)$'
 )
 
-# Approved executable allowlist to prevent arbitrary system execution
+# Full shape of an accepted target: [http(s)://]host[:port][/path]
+TARGET_REGEX = re.compile(
+    r"^(?:https?://)?"
+    r"(?P<host>\[[0-9a-fA-F:]+\]|[0-9a-fA-F]*:[0-9a-fA-F:]+|[A-Za-z0-9](?:[A-Za-z0-9.\-]*[A-Za-z0-9])?)"
+    r"(?::\d{1,5})?"
+    r"(?:/[A-Za-z0-9._~\-/%]*)?$"
+)
+
+# Approved executable allowlist. Only network diagnostic tools are permitted:
+# anything that can run code or read/write arbitrary files (python, node, git,
+# shells, interpreters) must never be added here.
 APPROVED_EXECUTABLES = {
     "ping", "ping.exe",
     "curl", "curl.exe",
     "nmap", "nmap.exe",
-    "python", "python.exe",
-    "node", "node.exe",
-    "eslint", "eslint.cmd",
-    "git", "git.exe",
-    "openssl", "openssl.exe"
+    "openssl", "openssl.exe",
 }
+
+MAX_ARG_LENGTH = 64
+MAX_ARGS = 16
+
+
+def executable_basename(executable: str) -> str:
+    return (executable or "").strip().lower().split("/")[-1].split("\\")[-1]
+
+
+def is_internal_address(host: str) -> bool:
+    """True when the host is, or resolves to, a loopback/private/link-local address."""
+    import ipaddress
+    import socket
+
+    clean = host.split("://")[-1].split("/")[0].strip("[]")
+    if clean.count(":") == 1:
+        clean = clean.split(":")[0]
+    if clean.lower() == "localhost":
+        return True
+    candidates = []
+    try:
+        candidates.append(ipaddress.ip_address(clean))
+    except ValueError:
+        try:
+            for info in socket.getaddrinfo(clean, None):
+                candidates.append(ipaddress.ip_address(info[4][0]))
+        except Exception:
+            return False
+    return any(
+        ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified
+        for ip in candidates
+    )
+
 
 class CommandRunner:
     @staticmethod
     def validate_target_host(host: str) -> bool:
+        """Accepts a bare hostname, IPv4 or IPv6 address, optionally with an http(s) scheme,
+        port and path. The whole string must match: input is never "cleaned" into
+        something valid, so values such as "${jndi:ldap://x/a}" are rejected outright."""
         if not host or len(host) > 255:
             return False
-        # Remove any protocol prefix for validation
-        clean_host = host.split("://")[-1].split("/")[0].split(":")[0]
-        return bool(HOST_REGEX.match(clean_host))
+        match = TARGET_REGEX.match(host.strip())
+        if not match:
+            return False
+        return bool(HOST_REGEX.match(match.group("host")))
 
     @staticmethod
     async def run_command_stream(
@@ -63,9 +106,23 @@ class CommandRunner:
                 await websocket.close()
             return db_run
 
-        # Security check 2: Executable check
-        executable_base = command_config.executable.lower().split("/")[-1].split("\\")[-1]
-        if executable_base not in APPROVED_EXECUTABLES:
+        # Security check 1b: in production the server must not be used to probe its own network
+        from app.config import settings, is_production
+        if is_production(settings) and await asyncio.to_thread(is_internal_address, target.host):
+            db_run.status = "Error"
+            db_run.raw_output = "[SECURITY REJECTION] Internal, loopback and private network targets are not allowed."
+            db_run.findings = json.dumps([{"severity": "Critical", "message": "Internal network target rejected."}])
+            db_run.end_time = datetime.now(timezone.utc).replace(tzinfo=None)
+            db.commit()
+            if websocket:
+                await websocket.send_json({"error": "Internal network targets are not allowed", "status": "Error"})
+                await websocket.close()
+            return db_run
+
+        # Security check 2: Executable check. Only the bare tool name is ever executed,
+        # so a stored path can never point at a different binary.
+        executable_base = executable_basename(command_config.executable)
+        if executable_base != (command_config.executable or "").strip().lower() or executable_base not in APPROVED_EXECUTABLES:
             db_run.status = "Error"
             db_run.raw_output = f"[SECURITY REJECTION] Executable '{command_config.executable}' is not in the approved security tools allowlist."
             db_run.findings = json.dumps([{"severity": "Critical", "message": "Unauthorized executable."}])
@@ -82,9 +139,14 @@ class CommandRunner:
         except Exception:
             allowed_args_list = []
 
+        if not isinstance(allowed_args_list, list):
+            allowed_args_list = []
+        if not isinstance(args, list):
+            args = []
+
         validated_args = []
-        for arg in args:
-            if arg in allowed_args_list:
+        for arg in args[:MAX_ARGS]:
+            if isinstance(arg, str) and arg in allowed_args_list:
                 validated_args.append(arg)
             else:
                 db_run.status = "Error"
@@ -98,7 +160,7 @@ class CommandRunner:
                 return db_run
 
         clean_host = target.host.split("://")[-1].split("/")[0]
-        cmd_args = [command_config.executable] + validated_args + [clean_host]
+        cmd_args = [executable_base] + validated_args + [clean_host]
         full_output = []
 
         process = None

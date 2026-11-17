@@ -26,6 +26,8 @@ apiClient.interceptors.response.use(
   (error) => {
     if (error.response && error.response.status === 401) {
       localStorage.removeItem('access_token');
+      localStorage.removeItem('gitflow_active_repo');
+      localStorage.removeItem('user');
       // If we're not already on the login page, redirect
       if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
         window.location.href = '/login';

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { AlertTriangle, XCircle, MinusCircle } from 'lucide-react';
 import { 
   Shield, 
   Cpu, 
@@ -23,11 +24,13 @@ import {
 } from 'lucide-react';
 import { apiClient } from '../config';
 
+type TestStatus = 'passed' | 'warning' | 'failed' | 'skipped';
+
 interface TestItem {
   id: string;
   name: string;
   description: string;
-  status: 'passed' | 'warning' | 'failed';
+  status: TestStatus;
   badge_color: string;
   metric: string;
   message: string;
@@ -38,7 +41,7 @@ interface TestCategory {
   id: string;
   title: string;
   icon: string;
-  status: 'passed' | 'warning' | 'failed';
+  status: TestStatus;
   badge_color: string;
   tests: TestItem[];
 }
@@ -49,8 +52,28 @@ interface TestSuiteResponse {
   badge_color: string;
   total_tests: number;
   passed_tests: number;
+  warning_tests?: number;
+  failed_tests?: number;
+  skipped_tests?: number;
+  measured_tests?: number;
   duration_ms: number;
   categories: TestCategory[];
+}
+
+const STATUS_STYLES: Record<TestStatus, { label: string; badge: string; text: string; footer: string }> = {
+  passed: { label: 'PASSED', badge: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30', text: 'text-emerald-400', footer: 'Measured this run' },
+  warning: { label: 'WARNING', badge: 'bg-amber-500/20 text-amber-300 border-amber-500/30', text: 'text-amber-400', footer: 'Needs attention' },
+  failed: { label: 'FAILED', badge: 'bg-red-500/20 text-red-300 border-red-500/30', text: 'text-red-400', footer: 'Check failed' },
+  skipped: { label: 'NOT MEASURED', badge: 'bg-slate-500/20 text-slate-300 border-slate-500/30', text: 'text-slate-400', footer: 'Not measured here' },
+};
+
+const statusStyle = (status: string) => STATUS_STYLES[(status as TestStatus)] ?? STATUS_STYLES.skipped;
+
+function StatusIcon({ status, className }: { status: string; className?: string }) {
+  if (status === 'passed') return <CheckCircle2 className={className} />;
+  if (status === 'warning') return <AlertTriangle className={className} />;
+  if (status === 'failed') return <XCircle className={className} />;
+  return <MinusCircle className={className} />;
 }
 
 export default function SystemAssurance() {
@@ -59,15 +82,19 @@ export default function SystemAssurance() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [lastRunTime, setLastRunTime] = useState<string>('');
   const [downloadingSbom, setDownloadingSbom] = useState<boolean>(false);
+  const [loadError, setLoadError] = useState<string>('');
 
   const runSuite = async () => {
     setLoading(true);
+    setLoadError('');
     try {
       const res = await apiClient.get<TestSuiteResponse>('/system-tests/run-all');
       setData(res.data);
       setLastRunTime(new Date().toLocaleTimeString());
     } catch (err) {
       console.error('Failed to run system test suite', err);
+      setData(null);
+      setLoadError('The test suite could not be run. No results are shown.');
     } finally {
       setLoading(false);
     }
@@ -134,6 +161,14 @@ export default function SystemAssurance() {
     }
   };
 
+  const overall = statusStyle(data?.overall_status ?? 'skipped');
+  const headline = loadError
+    ? loadError
+    : !data
+      ? (loading ? 'Running tests…' : 'Not run yet')
+      : `${data.passed_tests} passed · ${data.warning_tests ?? 0} warnings · ${data.failed_tests ?? 0} failed · ${data.skipped_tests ?? 0} not measured`;
+  const stateLabel = !data ? '—' : data.overall_status === 'passed' ? 'ALL CHECKS PASSED' : data.overall_status === 'warning' ? 'WARNINGS FOUND' : data.overall_status === 'failed' ? 'CHECKS FAILED' : 'NOT MEASURED';
+
   const filteredCategories = data?.categories.filter(c => 
     selectedCategory === 'all' ? true : c.id === selectedCategory
   ) || [];
@@ -144,9 +179,8 @@ export default function SystemAssurance() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-800">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              ALL 35 MASTER-GRADE CHECKS GREEN & OPERATIONAL
+            <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border flex items-center gap-1.5 ${overall.badge}`}>
+              {headline}
             </span>
             {lastRunTime && (
               <span className="text-xs text-slate-500">
@@ -158,7 +192,7 @@ export default function SystemAssurance() {
             System Assurance & Diagnostic Test Suite
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            Continuous enterprise verification across SAST, DAST, Chaos Resilience, Container IaC, Cloud IAM, Data Privacy, and Generative AI Safety.
+            Live checks of this deployment. Each test reports what it measured: passed, warning, failed, or not measured.
           </p>
         </div>
 
@@ -179,7 +213,7 @@ export default function SystemAssurance() {
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium text-sm text-white bg-emerald-600 hover:bg-emerald-500 transition-all shadow-lg shadow-emerald-950/40 disabled:opacity-50"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            {loading ? 'Executing Suite...' : 'Re-Run All 35 Tests'}
+            {loading ? 'Executing Suite...' : 'Re-run all tests'}
           </button>
         </div>
       </div>
@@ -194,9 +228,9 @@ export default function SystemAssurance() {
           <div>
             <div className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">System State</div>
             <div className="text-2xl font-bold text-white flex items-center gap-2">
-              100% HEALTHY
+              {stateLabel}
             </div>
-            <div className="text-xs text-emerald-400/80">All 35 Checks Passing (Green)</div>
+            <div className="text-xs text-emerald-400/80">{data ? `${data.measured_tests ?? data.total_tests} checks measured this run` : 'No results yet'}</div>
           </div>
         </div>
 
@@ -208,9 +242,9 @@ export default function SystemAssurance() {
           <div>
             <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Assurance Score</div>
             <div className="text-2xl font-bold text-emerald-400">
-              {data?.overall_score ?? 100}%
+              {data ? `${data.overall_score}%` : '—'}
             </div>
-            <div className="text-xs text-slate-400">Zero Critical Failures</div>
+            <div className="text-xs text-slate-400">{data ? `${data.failed_tests ?? 0} failed · ${data.warning_tests ?? 0} warnings` : 'No results yet'}</div>
           </div>
         </div>
 
@@ -220,11 +254,11 @@ export default function SystemAssurance() {
             <Layers className="w-7 h-7" />
           </div>
           <div>
-            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Tests Executed</div>
+            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Tests Passed</div>
             <div className="text-2xl font-bold text-white">
-              {data ? `${data.passed_tests} / ${data.total_tests}` : '35 / 35'}
+              {data ? `${data.passed_tests} / ${data.measured_tests ?? data.total_tests}` : '—'}
             </div>
-            <div className="text-xs text-slate-400">15 Distinct Subsystems</div>
+            <div className="text-xs text-slate-400">{data ? `${data.skipped_tests ?? 0} of ${data.total_tests} not measured` : 'No results yet'}</div>
           </div>
         </div>
 
@@ -238,7 +272,7 @@ export default function SystemAssurance() {
             <div className="text-2xl font-bold text-white">
               {data?.duration_ms ?? 0} ms
             </div>
-            <div className="text-xs text-slate-400">Instant Execution</div>
+            <div className="text-xs text-slate-400">Measured this run</div>
           </div>
         </div>
       </div>
@@ -423,9 +457,9 @@ export default function SystemAssurance() {
                   </p>
                 </div>
               </div>
-              <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                CATEGORY PASSED (GREEN)
+              <span className={`px-3 py-1 rounded-full text-xs font-semibold border flex items-center gap-1.5 ${statusStyle(category.status).badge}`}>
+                <StatusIcon status={category.status} className="w-3.5 h-3.5" />
+                {statusStyle(category.status).label}
               </span>
             </div>
 
@@ -442,15 +476,15 @@ export default function SystemAssurance() {
                   <div className="space-y-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
-                          <CheckCircle2 className="w-5 h-5" />
+                        <div className={`w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center font-bold ${statusStyle(test.status).text}`}>
+                          <StatusIcon status={test.status} className="w-5 h-5" />
                         </div>
                         <h3 className="font-semibold text-white text-sm leading-snug">
                           {test.name}
                         </h3>
                       </div>
-                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                        PASSED
+                      <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border whitespace-nowrap ${statusStyle(test.status).badge}`}>
+                        {statusStyle(test.status).label}
                       </span>
                     </div>
 
@@ -463,7 +497,7 @@ export default function SystemAssurance() {
                       <div className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">
                         Observed Metric
                       </div>
-                      <div className="text-xs font-bold text-emerald-400 font-mono mt-0.5">
+                      <div className={`text-xs font-bold font-mono mt-0.5 ${statusStyle(test.status).text}`}>
                         {test.metric}
                       </div>
                     </div>
@@ -475,9 +509,8 @@ export default function SystemAssurance() {
 
                   <div className="pt-4 mt-3 border-t border-slate-800/60 flex items-center justify-between text-[11px] text-slate-500">
                     <span>Duration: {test.duration_ms} ms</span>
-                    <span className="text-emerald-400 font-medium flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                      Verified Live
+                    <span className={`font-medium ${statusStyle(test.status).text}`}>
+                      {statusStyle(test.status).footer}
                     </span>
                   </div>
                 </div>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
-import { apiClient } from '../config';
+import { apiClient, describeRequestError } from '../config';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -36,14 +36,7 @@ export default function Register() {
       localStorage.setItem('access_token', loginRes.data.access_token);
       navigate('/dashboard');
     } catch (err: any) {
-      // Validation errors arrive as a list of objects; only ever render text.
-      const detail = err.response?.data?.detail;
-      const message = typeof detail === 'string'
-        ? detail
-        : Array.isArray(detail) && detail[0]?.msg
-          ? String(detail[0].msg)
-          : 'Registration failed. Check your details and try again.';
-      setError(message);
+      setError(describeRequestError(err, 'Registration failed. Check your details and try again.'));
     }
   };
 

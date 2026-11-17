@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, KeyRound, CheckCircle2, ArrowRight, ArrowLeft, X } from 'lucide-react';
-import { apiClient } from '../config';
+import { apiClient, describeRequestError } from '../config';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -38,8 +38,7 @@ export default function Login() {
       }
       navigate('/dashboard');
     } catch (err: any) {
-      const detail = err.response?.data?.detail;
-      setError(typeof detail === 'string' ? detail : 'Sign in failed. Check your details and try again.');
+      setError(describeRequestError(err, 'Sign in failed. Check your details and try again.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -55,8 +54,7 @@ export default function Login() {
       const res = await apiClient.post('/auth/forgot-password', { email: resetEmail.trim() });
       setResetSuccess(res.data?.message || 'If an account exists for that email, a password reset link has been sent.');
     } catch (err: any) {
-      const detail = err.response?.data?.detail;
-      setResetError(typeof detail === 'string' ? detail : 'Could not send the reset link. Please try again shortly.');
+      setResetError(describeRequestError(err, 'Could not send the reset link. Please try again shortly.'));
     } finally {
       setResetLoading(false);
     }

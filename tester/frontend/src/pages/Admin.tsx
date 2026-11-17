@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
-import { API_URL } from '../config';
+import { API_URL, describeRequestError } from '../config';
 
 interface UserItem {
   id: number;
@@ -143,7 +143,7 @@ export default function Admin() {
         setLoginError('Invalid administrator credentials.');
       }
     } catch (err: any) {
-      const msg = err.response?.data?.detail || err.message || 'Authentication failed. Please verify administrator credentials.';
+      const msg = describeRequestError(err, 'Authentication failed. Please verify administrator credentials.');
       setLoginError(msg);
     } finally {
       setLoginLoading(false);

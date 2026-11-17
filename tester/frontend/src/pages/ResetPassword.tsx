@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, KeyRound } from 'lucide-react';
-import { apiClient } from '../config';
+import { apiClient, describeRequestError } from '../config';
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -33,8 +33,7 @@ export default function ResetPassword() {
       setDone(true);
       setTimeout(() => navigate('/login'), 2500);
     } catch (err: any) {
-      const detail = err.response?.data?.detail;
-      setError(typeof detail === 'string' ? detail : 'This reset link is invalid or has expired. Please request a new one.');
+      setError(describeRequestError(err, 'This reset link is invalid or has expired. Please request a new one.'));
     } finally {
       setLoading(false);
     }

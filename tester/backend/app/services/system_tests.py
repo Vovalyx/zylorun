@@ -658,12 +658,19 @@ class SystemTestService:
         def concurrency() -> CheckResult:
             from app.database.session import SessionLocal
 
+            errors: List[str] = []
+
             def one_query(_index: int) -> bool:
                 db = SessionLocal()
                 try:
                     db.execute(text("SELECT 1"))
                     return True
-                except Exception:
+                except Exception as exc:
+                    # Keep the first line of the driver's message (credentials masked) so a
+                    # failure can be diagnosed from the page.
+                    first = (str(getattr(exc, "orig", None) or exc).strip().splitlines() or [""])[0]
+                    first = re.sub(r"://([^:/@\s]+):[^@\s]+@", r"://\1:***@", first)
+                    errors.append(f"{exc.__class__.__name__}: {first[:200]}")
                     return False
                 finally:
                     db.close()
@@ -676,7 +683,7 @@ class SystemTestService:
             failures = results.count(False)
             metric = f"{total - failures}/{total} queries OK, {round(total / elapsed)} queries/s"
             if failures:
-                return FAILED, metric, f"{failures} of {total} concurrent database queries failed."
+                return FAILED, metric, f"{failures} of {total} concurrent database queries failed. First error: {errors[0] if errors else 'unknown'}"
             return PASSED, metric, "60 queries across 10 concurrent threads completed. This measures the database pool, not HTTP request throughput."
 
         def slow_queries() -> CheckResult:

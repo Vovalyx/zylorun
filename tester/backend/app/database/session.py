@@ -31,18 +31,30 @@ is_sqlite = "sqlite" in async_url
 async_kwargs = {"echo": False}
 sync_kwargs = {"echo": False}
 
+def _pool_setting(name: str, default: int) -> int:
+    try:
+        return max(0, int(os.getenv(name, str(default))))
+    except ValueError:
+        return default
+
+
 if not is_sqlite:
+    # Hosted Postgres poolers cap connections per project (Supabase's session pooler
+    # allows about 15 on the smaller plans). Both engines together must stay under that
+    # cap, or bursts of traffic get "max clients reached" errors. When every connection
+    # is busy, further requests wait up to pool_timeout for a free one instead of failing.
+    # Raise these with the DB_* settings only if the database plan allows more connections.
     async_kwargs.update({
-        "pool_size": 25,
-        "max_overflow": 20,
+        "pool_size": _pool_setting("DB_POOL_SIZE", 6),
+        "max_overflow": _pool_setting("DB_MAX_OVERFLOW", 4),
         "pool_timeout": 30,
         "pool_recycle": 1800,
         "pool_pre_ping": True,
         "connect_args": {"timeout": 15},
     })
     sync_kwargs.update({
-        "pool_size": 5,
-        "max_overflow": 10,
+        "pool_size": _pool_setting("DB_SYNC_POOL_SIZE", 2),
+        "max_overflow": _pool_setting("DB_SYNC_MAX_OVERFLOW", 2),
         "pool_timeout": 30,
         "pool_recycle": 1800,
         "pool_pre_ping": True,

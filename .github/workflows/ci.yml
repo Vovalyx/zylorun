@@ -40,7 +40,9 @@ jobs:
       - name: Run Complete Backend Test Suite
         env:
           DATABASE_URL: sqlite+aiosqlite:///./ci_test.db
-        run: pytest -v
+        # "python -m pytest" puts this folder on the import path so tests can import "app";
+        # the bare "pytest" command does not, and every test file failed to import.
+        run: python -m pytest -v
 
   frontend-build-and-assets:
     name: Frontend Typecheck, Build & Asset Integrity

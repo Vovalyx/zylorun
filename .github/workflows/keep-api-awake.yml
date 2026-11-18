@@ -1,0 +1,35 @@
+name: Keep API awake
+
+# Render's free plan stops the API after ~15 minutes without traffic, and waking it
+# takes from 30 seconds to several minutes, which made the first visit very slow.
+# Calling /health every 5 minutes keeps it running. One always-on free service uses
+# about 744 of the 750 free instance hours Render gives per month.
+# To stop: delete this file, or disable the workflow in the repository's Actions tab.
+
+on:
+  schedule:
+    - cron: '1-59/5 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping the API health endpoint
+        env:
+          API_URL: ${{ vars.ZYLORUN_API_URL || 'https://zylorun.onrender.com' }}
+        run: |
+          for attempt in 1 2 3; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 90 "$API_URL/health" || true)
+            if [ "$code" = "200" ]; then
+              echo "API is awake (attempt $attempt)"
+              exit 0
+            fi
+            echo "attempt $attempt: HTTP ${code:-none}"
+            sleep 15
+          done
+          # A warning, not a failure: a slow wake-up should not send failure e-mails every 5 minutes.
+          echo "::warning::The API did not answer /health after 3 attempts"

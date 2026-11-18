@@ -2,6 +2,7 @@ import { useEffect, Component, type ErrorInfo, type ReactNode, lazy, Suspense } 
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
 import Layout from './components/Layout';
+import ServerWakeBanner from './components/ServerWakeBanner';
 import { apiClient } from './config'; // Ensures axios interceptor is loaded
 
 // Static public entry pages for instant landing & auth transitions
@@ -146,6 +147,7 @@ function App() {
     <AppErrorBoundary>
       <ThemeProvider>
         <BrowserRouter>
+          <ServerWakeBanner />
           <TokenExtractor />
           <VisitorTracker />
           <Suspense fallback={<PageFallback />}>

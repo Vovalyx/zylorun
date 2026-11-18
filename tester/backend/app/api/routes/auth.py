@@ -17,7 +17,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import throttle
 from app.auth.deps import get_current_user, invalidate_user_cache
-from app.auth.security import get_password_hash, verify_password, create_access_token, encrypt_token
+from app.auth.security import (
+    create_access_token, encrypt_token, get_password_hash_async, password_needs_rehash, verify_password_async,
+)
 from app.config import settings, is_production
 from app.database.models import User
 from app.database.session import get_db
@@ -107,7 +109,7 @@ async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
     db_user = User(
         username=username_clean,
         email=email_clean,
-        hashed_password=get_password_hash(user.password),
+        hashed_password=await get_password_hash_async(user.password),
         is_active=True,
     )
     db.add(db_user)
@@ -160,7 +162,7 @@ async def login(request: Request, response: Response, db: AsyncSession = Depends
     )).scalars().first()
 
     # Unknown accounts and wrong passwords get the same answer; nothing is created here.
-    if not user or not user.is_active or not verify_password(password, user.hashed_password):
+    if not user or not user.is_active or not await verify_password_async(password, user.hashed_password):
         throttle.record_failure(login_id)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -175,6 +177,8 @@ async def login(request: Request, response: Response, db: AsyncSession = Depends
 
     try:
         user.last_login_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        if password_needs_rehash(user.hashed_password):
+            user.hashed_password = await get_password_hash_async(password)  # upgrade to the current work factor
         await db.commit()
     except Exception:
         await db.rollback()
@@ -237,7 +241,7 @@ async def reset_password(req: PasswordResetRequest, db: AsyncSession = Depends(g
     if not user or not user.is_active or payload.get("pwd") != _password_fingerprint(user.hashed_password):
         raise invalid
 
-    user.hashed_password = get_password_hash(new_password)
+    user.hashed_password = await get_password_hash_async(new_password)
     await db.commit()
     invalidate_user_cache(user.username)
     throttle.clear(user.email)
@@ -264,7 +268,7 @@ async def delete_my_account(
     user = (await db.execute(select(User).where(User.id == current_user.id))).scalars().first()
     if not user:
         raise HTTPException(status_code=404, detail="Account not found")
-    if user.hashed_password and not verify_password(req.password, user.hashed_password):
+    if user.hashed_password and not await verify_password_async(req.password, user.hashed_password):
         raise HTTPException(status_code=403, detail="Password is incorrect.")
     if user.role == "Admin":
         other_admins = (await db.execute(

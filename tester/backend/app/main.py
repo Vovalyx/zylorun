@@ -114,7 +114,7 @@ def ensure_bootstrap_admin():
     from app.config import settings
     from app.database.session import SessionLocal
     from app.database.models import User
-    from app.auth.security import get_password_hash, verify_password
+    from app.auth.security import get_password_hash, password_needs_rehash, verify_password
 
     username = (settings.ADMIN_USERNAME or "admin").strip()
     email = (settings.ADMIN_EMAIL or "").strip().lower()
@@ -154,7 +154,7 @@ def ensure_bootstrap_admin():
             admin_u.role = "Admin"; changed = True
         if not admin_u.is_active:
             admin_u.is_active = True; changed = True
-        if not verify_password(password, admin_u.hashed_password):
+        if password_needs_rehash(admin_u.hashed_password) or not verify_password(password, admin_u.hashed_password):
             admin_u.hashed_password = get_password_hash(password); changed = True
         if changed:
             db.commit()

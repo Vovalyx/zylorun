@@ -18,7 +18,7 @@ from app.database.session import AsyncSessionLocal, get_db
 from app.database.models import Repository, Scan, Commit, User, VisitorLog, SystemErrorLog
 from app.workers.scan_job import run_scan
 from app.utils.github import get_canonical_github_url, git_environment
-from app.auth.security import decrypt_token, create_access_token, verify_password
+from app.auth.security import decrypt_token, create_access_token, verify_password_async
 from app.auth.deps import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -500,7 +500,7 @@ async def admin_portal_login(
         )
     )).scalars().first()
 
-    if not user or not user.is_active or not verify_password(payload.password, user.hashed_password):
+    if not user or not user.is_active or not await verify_password_async(payload.password, user.hashed_password):
         throttle.record_failure(f"admin:{clean_user}")
         raise HTTPException(status_code=401, detail="Invalid administrator credentials.")
 

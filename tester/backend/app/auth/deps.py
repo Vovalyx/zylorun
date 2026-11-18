@@ -12,7 +12,7 @@ import time
 from typing import Dict, Tuple
 
 _USER_CACHE: Dict[str, Tuple[User, float]] = {}
-_CACHE_TTL = 15.0  # short lifetime so role changes and deactivation apply quickly
+_CACHE_TTL = 60.0  # role changes, deletion and password resets clear the cache immediately
 
 def invalidate_user_cache(username: str | None = None):
     global _USER_CACHE

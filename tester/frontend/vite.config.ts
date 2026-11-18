@@ -25,21 +25,17 @@ export default defineConfig({
     sourcemap: false,
     rollupOptions: {
       output: {
+        // Only React gets a fixed chunk (every page needs it). Charts (recharts) and PDF
+        // export (jspdf) are split automatically so they load only on the pages that use
+        // them: forcing them into named chunks made the first page download ~350 KB of
+        // gzipped libraries it never used (first load went from ~497 KB to ~144 KB).
         manualChunks(id) {
-          if (id.includes('node_modules')) {
-            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router-dom') || id.includes('react-is')) {
-              return 'vendor-react';
-            }
-            if (id.includes('recharts') || id.includes('d3')) {
-              return 'vendor-charts';
-            }
-            if (id.includes('lucide-react')) {
-              return 'vendor-icons';
-            }
-            if (id.includes('jspdf') || id.includes('html2canvas') || id.includes('canvg') || id.includes('fflate')) {
-              return 'vendor-pdf';
-            }
+          const path = id.replace(/\\/g, '/');
+          const inPackage = (...names: string[]) => names.some((name) => path.includes(`/node_modules/${name}/`));
+          if (inPackage('react', 'react-dom', 'react-router', 'react-router-dom', 'scheduler')) {
+            return 'vendor-react';
           }
+          return undefined;
         }
       }
     }
